@@ -1,7 +1,7 @@
 # PIOA M6O-122BV-25
-
-
-
+Карпова Кира Евгеньевна
+М6О-122БВ-25
+Лабораторные буду писать на python
 ## Getting started
 
 To make it easy for you to get started with GitLab, here's a list of recommended next steps.
