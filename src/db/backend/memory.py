@@ -10,6 +10,11 @@ def create_record(
     sex: str,          # Пол
 ) -> StudentRecord:
 
+    sex = sex.lower()
+
+    if sex not in ['м', 'ж']:
+        raise ValueError("Пол должен быть 'м' или 'ж'")
+    
     if age < 0:
         raise ValueError("Поле age не может быть отрицательным.")
     
@@ -35,6 +40,9 @@ def select_record(
     age: int | None = None,          # Фильтр по возрасту
     sex: str | None = None,          # Фильтр по полу
 ) -> list[StudentRecord]:
+    
+    if sex is not None:
+        sex = sex.lower()
 
     if (
         student_id is None
@@ -63,3 +71,40 @@ def select_record(
             continue
         result.append(record)
     return result
+
+def update_record(student_id: int, **kwargs) -> StudentRecord | None:
+    
+    for i, record in enumerate(Student):
+        if record[0] == student_id:
+            updated = list(record)
+
+            if "first_name" in kwargs:
+                updated[1] = kwargs["first_name"]
+                
+            if "second_name" in kwargs:
+                updated[2] = kwargs["second_name"]
+
+            if "age" in kwargs:
+                age = kwargs["age"]
+                if age < 0:
+                    raise ValueError("Возраст не может быть менбше нуля")
+                updated[3] = age
+
+            if "sex" in kwargs:
+                sex = kwargs["sex"].lower()
+                if sex not in ["м", "ж"]:
+                    raise ValueError("Пол должен быть только 'ж' или 'м'")
+                updated[4] = sex
+        
+            Student[i] = tuple(updated)
+            return Student[i]
+    
+    return None
+
+def delete_record(student_id: int) -> bool:
+    
+    for i, record in enumerate(Student):
+        if record[0] == student_id:
+            del Student[i]
+            return True
+    return False
