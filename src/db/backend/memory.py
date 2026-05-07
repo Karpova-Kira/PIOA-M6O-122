@@ -1,6 +1,37 @@
+from .errors import DuplicateIDError, InvalidAgeError 
 type StudentRecord = tuple[int, str, str, int, str]
 
 Student: list[StudentRecord] = []
+
+class StudentTable:
+
+    def __init__(self) -> None:
+        self._student: list[StudentRecord] = []
+
+    def create_record(
+        self,
+        student_id: int,
+        first_name: str,
+        second_name: str,
+        age: int,
+        sex: str,
+    ) -> StudentRecord:
+        
+        if age < 0:
+            raise InvalidAgeError("Поле age не может быть отрицательным.")
+
+        if any(record[0] == student_id for record in self._student):
+            raise DuplicateIDError(f"Запись с id={student_id} уже существует.")
+
+        new_record: StudentRecord = (
+            student_id,
+            first_name.strip(),
+            second_name.strip(),
+            age,
+            sex.strip(),
+        )
+        self._student.append(new_record)
+        return new_record
 
 def create_record(
     student_id: int,   # Уникальный идентификатор записи
@@ -12,8 +43,8 @@ def create_record(
 
     sex = sex.lower()
 
-    if sex not in ['м', 'ж']:
-        raise ValueError("Пол должен быть 'м' или 'ж'")
+    if sex not in ['m', 'f']:
+        raise ValueError("Пол должен быть 'm' или 'f'")
     
     if age < 0:
         raise ValueError("Поле age не может быть отрицательным.")
