@@ -1,9 +1,11 @@
-from .backend.memory import create_table, list_tables, create_record, select_record, update_record, delete_record
+from .backend.memory import StudentTable
+from .backend.errors import InvalidAgeError, DuplicateIDError
 
 class Student_tui:
 
     def __init__(self):
-        self.current_table: str | None = None
+        self.current_table: StudentTable | None = None
+        self.current_table_name: str | None = None
 
     def _print_menu(self) -> None:
         print("\n=== База студентов ===")
@@ -43,10 +45,11 @@ class Student_tui:
         age = self._read_int("age: ")
         sex = input("sex: ").strip()
         try:
-            record = create_record(self.current_table, student_id, first_name, second_name, age, sex)
+            record = self.current_table.create_record(
+                student_id, first_name, second_name, age, sex)
             print(f"Запись добавлена: {record}")
 
-        except ValueError as exc:
+        except (InvalidAgeError, DuplicateIDError, ValueError) as exc:
             print(f"Ошибка: {exc}")
 
 
@@ -67,9 +70,12 @@ class Student_tui:
         print("\n=== Создание таблицы ===")
         name = input("Название таблицы: ").strip()
 
+        if not name:
+            print("Ошибка: название таблицы не может быть пустым.")
+            return
         try:
-            create_table(name)
-            self.current_table = name
+            self.current_table = StudentTable.create_table(name)
+            self.current_table_name = name
             print(f"Таблица '{name}' создана и выбрана для работы.")
         except ValueError as exc:
             print(f"Ошибка: {exc}")
@@ -77,7 +83,7 @@ class Student_tui:
 
     def _select_table(self) -> None:
 
-        tables = list_tables()
+        tables = StudentTable.list_tables()
         if not tables:
             print("Нет созданных таблиц. Сначала создайте таблицу (пункт 1).")
             return
@@ -86,9 +92,12 @@ class Student_tui:
             print(f"  {i}. {name}")
 
         try:
+            
             choice = int(input("Выберите номер таблицы: "))
-            self.current_table = tables[choice - 1]
-            print(f"Выбрана таблица: '{self.current_table}'")
+            table_name = tables[choice - 1]
+            self.current_table = StudentTable(table_name)
+            self.current_table_name = table_name 
+            print(f"Выбрана таблица: '{self.current_table_name}'")
         except (ValueError, IndexError):
             print("Неверный выбор!")
 
@@ -98,8 +107,8 @@ class Student_tui:
         if self.current_table is None:
             print("Ошибка: сначала создайте или выберите таблицу.")
             return
-        print(f"\nСписок записей в таблице '{self.current_table}'")
-        records = select_record(self.current_table)
+        print(f"\nСписок записей в таблице '{self.current_table_name}'")
+        records = self.current_table.get_all()
         self._print_records(records)
 
 
@@ -124,7 +133,7 @@ class Student_tui:
             print("Ошибка: сначала создайте или выберите таблицу.")
             return
         
-        print(f"\nПоиск по фильтру в таблице '{self.current_table}' (Enter = пропустить поле)")
+        print(f"\nПоиск по фильтру в таблице '{self.current_table_name}' (Enter = пропустить поле)")
 
         student_id = self._read_optional_int("id: ")
         first_name = input("first_name: ").strip() or None
@@ -134,8 +143,7 @@ class Student_tui:
 
         sex = sex_input.lower() if sex_input else None
 
-        records = select_record(
-            self.current_table,
+        records = self.current_table.select_record(
             student_id=student_id,
             first_name=first_name,
             second_name=second_name,
@@ -155,7 +163,7 @@ class Student_tui:
         print(f"\nОбновление записи в таблице '{self.current_table}'")
 
         student_id = self._read_int("Введите ID студента: ")
-        existing = select_record(self.current_table, student_id=student_id)
+        existing = self.current_table.select_record(student_id=student_id)
         if not existing:
             print(f"Ошибка: студент с ID= {student_id} не найден")
             return
@@ -185,8 +193,8 @@ class Student_tui:
                 print("Ошибка: возраст должен быть целым числом")
                 return
         if new_sex:
-            if new_sex not in ['м', 'ж', 'М', 'Ж']:
-                print("Ошибка: пол должен быть 'м' или 'ж'")
+            if new_sex not in ["M", "m", "F", "f"]:
+                print("Ошибка: пол должен быть 'M' или 'F'")
                 return
             changes['sex'] = new_sex
 
@@ -197,7 +205,7 @@ class Student_tui:
         
         
         try:
-            updated = update_record(self.current_table, student_id, **changes)
+            updated =  self.current_table.update_record(student_id, **changes)
             if updated:
                 print(f"Запись обновлена: {updated}")
             else:
@@ -214,7 +222,7 @@ class Student_tui:
         
         print(f"\nУдаление записи из таблицы '{self.current_table}'")
 
-        all_records = select_record(self.current_table)
+        all_records = self.current_table.get_all()
         if not all_records:
             print("Таблица пуста.")
             return
@@ -226,16 +234,16 @@ class Student_tui:
 
         student_id = self._read_int("\nВведите ID записи: ")
         
-        existing = select_record(self.current_table, student_id=student_id)
+        existing = self.current_table.select_record(student_id=student_id)
         if not existing:
             print(f"Запись с ID={student_id} не найден.")
             return
         
-        print(f"\nСтудент для удаления: {existing[0]}")
+        print(f"\nЗапись для удаления: {existing[0]}")
         confirm = input("Вы уверены? (y/n): ").strip().lower()
         
         if confirm == 'y' or confirm == 'yes' or confirm == 'да':
-            deleted = delete_record(self.current_table, student_id)
+            deleted = self.current_table.delete_record(student_id)
             if deleted:
                 print(f"Запись с ID={student_id} успешно удалена.")
             else:
