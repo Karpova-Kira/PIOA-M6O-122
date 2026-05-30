@@ -1,0 +1,24 @@
+{
+  "columns": [
+    "id",
+    "name",
+    "age"
+  ],
+  "records": [
+    {
+      "id": 1,
+      "name": "blablabla",
+      "age": 1
+    },
+    {
+      "id": 2,
+      "name": "blebleble",
+      "age": 2
+    },
+    {
+      "id": 3,
+      "name": "blublublu",
+      "age": 3
+    }
+  ]
+}

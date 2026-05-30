@@ -1,101 +1,54 @@
 import unittest
-from src.db.backend.memory import StudentTable
-from src.db.backend.errors import InvalidAgeError, DuplicateIDError
+from src.db.backend.memory import MemoryDatabase
+from src.db.backend.errors import TableNotFoundError, TableAlreadyExistsError
 
-class TestMemory(unittest.TestCase):
 
+class TestMemoryDatabase(unittest.TestCase):
+    
     def setUp(self):
-        # Создаём новую таблицу с уникальным именем для каждого теста
-        import uuid
-        self.table_name = f"TestTable_{uuid.uuid4().hex[:8]}"
-        self.table = StudentTable.create_table(self.table_name)
+        self.db = MemoryDatabase()
     
-    def tearDown(self):
-        # Удаляем таблицу после теста (через внутренний словарь)
-        import uuid
-        from src.db.backend.memory import StudentTable as ST
-        if self.table_name in ST._tables:
-            del ST._tables[self.table_name]
-            if self.table_name in ST._id_counters:
-                del ST._id_counters[self.table_name]
+    def test_create_table(self):
+        self.db.create_table("students", ("id", "name", "age"))
+        self.assertTrue(self.db._table_exists("students"))
     
-    def test_create_record(self):
-        record = self.table.create_record(1, "John", "Doe", 20, "M")
-        self.assertEqual(record[0], 1)
-        self.assertEqual(record[1], "John")
-        self.assertEqual(record[2], "Doe")
-        self.assertEqual(record[3], 20)
-        self.assertEqual(record[4], "M")
+    def test_create_table_already_exists(self):
+        self.db.create_table("students", ("id", "name"))
+        with self.assertRaises(TableAlreadyExistsError):
+            self.db.create_table("students", ("id", "name"))
     
-    def test_create_record_negative_age(self):
-        with self.assertRaises(InvalidAgeError):
-            self.table.create_record(1, "John", "Doe", -5, "M")
-    
-    def test_create_record_duplicate_id(self):
-        self.table.create_record(1, "John", "Doe", 20, "M")
-        with self.assertRaises(DuplicateIDError):
-            self.table.create_record(1, "Jane", "Smith", 22, "F")
-    
-    def test_create_record_invalid_sex(self):
-        with self.assertRaises(ValueError):
-            self.table.create_record(1, "John", "Doe", 20, "X")
-    
-    def test_select_record_all(self):
-        self.table.create_record(1, "John", "Doe", 20, "M")
-        self.table.create_record(2, "Jane", "Smith", 22, "F")
-        records = self.table.select_record()
-        self.assertEqual(len(records), 2)
-    
-    def test_select_record_by_id(self):
-        self.table.create_record(1, "John", "Doe", 20, "M")
-        self.table.create_record(2, "Jane", "Smith", 22, "F")
-        records = self.table.select_record(student_id=1)
+    def test_insert_and_select(self):
+        self.db.create_table("students", ("id", "name", "age"))
+        self.db.insert_record("students", {"id": 1, "name": "John", "age": 20})
+        
+        records = self.db.select_records("students")
         self.assertEqual(len(records), 1)
-        self.assertEqual(records[0][1], "John")
+        self.assertEqual(records[0]["name"], "John")
     
-    def test_select_record_by_sex(self):
-        self.table.create_record(1, "John", "Doe", 20, "M")
-        self.table.create_record(2, "Jane", "Smith", 22, "F")
-        records = self.table.select_record(sex="F")
+    def test_select_with_filters(self):
+        self.db.create_table("students", ("id", "name", "age"))
+        self.db.insert_record("students", {"id": 1, "name": "John", "age": 20})
+        self.db.insert_record("students", {"id": 2, "name": "Jane", "age": 22})
+        
+        records = self.db.select_records("students", name="Jane")
         self.assertEqual(len(records), 1)
-        self.assertEqual(records[0][1], "Jane")
+        self.assertEqual(records[0]["id"], 2)
     
     def test_update_record(self):
-        self.table.create_record(1, "John", "Doe", 20, "M")
-        updated = self.table.update_record(1, first_name="Jonathan", age=21)
-        self.assertEqual(updated[1], "Jonathan")
-        self.assertEqual(updated[3], 21)
-    
-    def test_update_record_not_found(self):
-        result = self.table.update_record(999, first_name="Test")
-        self.assertIsNone(result)
+        self.db.create_table("students", ("id", "name", "age"))
+        self.db.insert_record("students", {"id": 1, "name": "John", "age": 20})
+        
+        updated = self.db.update_record("students", 1, name="Jonathan")
+        self.assertEqual(updated["name"], "Jonathan")
     
     def test_delete_record(self):
-        self.table.create_record(1, "John", "Doe", 20, "M")
-        self.table.create_record(2, "Jane", "Smith", 22, "F")
-        result = self.table.delete_record(1)
+        self.db.create_table("students", ("id", "name", "age"))
+        self.db.insert_record("students", {"id": 1, "name": "John", "age": 20})
+        
+        result = self.db.delete_record("students", 1)
         self.assertTrue(result)
-        records = self.table.select_record()
-        self.assertEqual(len(records), 1)
-        self.assertEqual(records[0][1], "Jane")
-    
-    def test_delete_record_not_found(self):
-        result = self.table.delete_record(999)
-        self.assertFalse(result)
-    
-    def test_get_all(self):
-        self.table.create_record(1, "John", "Doe", 20, "M")
-        self.table.create_record(2, "Jane", "Smith", 22, "F")
-        records = self.table.get_all()
-        self.assertEqual(len(records), 2)
-    
-    def test_create_table_duplicate(self):
-        with self.assertRaises(ValueError):
-            StudentTable.create_table(self.table_name)
-    
-    def test_list_tables(self):
-        tables = StudentTable.list_tables()
-        self.assertIn(self.table_name, tables)
+        self.assertEqual(len(self.db.select_records("students")), 0)
+
 
 if __name__ == "__main__":
-    unittest.main()    
+    unittest.main()

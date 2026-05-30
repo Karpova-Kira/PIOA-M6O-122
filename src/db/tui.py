@@ -1,21 +1,48 @@
-from .backend.memory import StudentTable
-from .backend.errors import InvalidAgeError, DuplicateIDError
+from .backend.errors import (
+    TableAlreadyExistsError, TableNotFoundError,
+    MissingColumnError, UnknownColumnError, InvalidStorageDataError
+)
+from src.db.backend.file import FileDatabase
+from src.db.backend.memory import MemoryDatabase
+from .backend.csv_file import CSVFileDatabase
 
-class Student_tui:
+class StudentTUI:
 
-    def __init__(self):
-        self.current_table: StudentTable | None = None
+    def __init__(self, skip_db_choice: bool = False):
         self.current_table_name: str | None = None
+
+        if not skip_db_choice:
+            print("\n=== Выбор типа базы данных ===")
+            print("1. In-memory (данные не сохраняются)")
+            print("2. File database (JSON) — данные сохраняются в папке 'data/'")
+            print("3. File database (CSV) — данные сохраняются в папке 'data_csv/'")
+            
+            choice = input("Выберите тип (1, 2 или 3): ").strip()
+            
+            if choice == "2":
+                self.db = FileDatabase()
+                print("Используется JSON-файловая база данных. Данные сохраняются в папке 'data/'")
+            elif choice == "3":
+                self.db = CSVFileDatabase()
+                print("Используется CSV-файловая база данных. Данные сохраняются в папке 'data_csv/'")
+            else:
+                self.db = MemoryDatabase()
+                print("Используется in-memory база данных. Данные будут потеряны после закрытия программы.")
+        else:
+            self.db = MemoryDatabase()
+    
 
     def _print_menu(self) -> None:
         print("\n=== База студентов ===")
         print("1. Создать таблицу")
         print("2. Выбрать/сменить таблицу")
-        print("3. Добавить запись")
-        print("4. Показать все записи")
-        print("5. Найти записи по фильтру")
-        print("6. Обновить запись")
-        print("7. Удалить запись")
+        print("3. Показать все таблицы")
+        print("4. Добавить запись")
+        print("5. Показать все записи")
+        print("6. Найти записи по фильтру")
+        print("7. Обновить запись")
+        print("8. Удалить запись")
+        print("9. Показать структуру таблицы")
         print("0. Выход")
 
 
@@ -30,28 +57,52 @@ class Student_tui:
             except ValueError:
                 print("Ошибка: введите целое число.")
 
+    def _read_string(self, prompt: str) -> str:
+            while True:
+                raw = input(prompt).strip()
+                if raw:
+                    return raw
+                print("Ошибка: поле не может быть пустым.")
 
+    def _add_record(self) -> None:
 
-    def _add_student(self) -> None:
-
-        if self.current_table is None:
+        if self.current_table_name is None:
             print("Ошибка: сначала создайте или выберите таблицу.")
             return
-        print("\nДобавление записи")
 
-        student_id = self._read_int("id: ")
-        first_name = input("first_name: ").strip()
-        second_name = input("second_name: ").strip()
-        age = self._read_int("age: ")
-        sex = input("sex: ").strip()
+        print(f"\nДобавление записи в таблицу '{self.current_table_name}'")
+        
         try:
-            record = self.current_table.create_record(
-                student_id, first_name, second_name, age, sex)
+            if hasattr(self.db, 'get_schema'):
+                schema = self.db.get_schema(self.current_table_name)
+            elif hasattr(self.db, '_load_table'):
+                table = self.db._load_table(self.current_table_name)
+                schema = table.columns
+            else:
+                print("Предупреждение: не удалось получить схему таблицы.")
+                print("Используются стандартные поля: id, first_name, second_name, age, sex")
+                schema = ("id", "first_name", "second_name", "age", "sex")
+        except Exception as e:
+            print(f"Не удалось получить схему таблицы: {e}")
+            schema = ("id", "first_name", "second_name", "age", "sex")
+        
+        record = {}
+        for column in schema:
+            if column == "id":
+                record[column] = self._read_int(f"{column}: ")
+            elif column in ["age", "year"]:
+                record[column] = self._read_int(f"{column}: ")
+            elif column in ["sex", "gender"]:
+                value = self._read_string(f"{column} (M/F): ")
+                record[column] = value.upper()
+            else:
+                record[column] = self._read_string(f"{column}: ")
+
+        try:
+            self.db.insert_record(self.current_table_name, record)
             print(f"Запись добавлена: {record}")
-
-        except (InvalidAgeError, DuplicateIDError, ValueError) as exc:
+        except (MissingColumnError, UnknownColumnError, ValueError) as exc:
             print(f"Ошибка: {exc}")
-
 
 
     def _print_records(self, records: list) -> None:
@@ -68,49 +119,73 @@ class Student_tui:
     def _create_table(self) -> None:
 
         print("\n=== Создание таблицы ===")
-        name = input("Название таблицы: ").strip()
+        name = self._read_string("Название таблицы: ")
 
-        if not name:
-            print("Ошибка: название таблицы не может быть пустым.")
+        print("Введите названия полей через запятую (например: id,name,age)")
+        columns_input = input("Поля: ").strip()
+        
+        if not columns_input:
+            columns = ("id", "first_name", "second_name", "age", "sex")
+            print(f"Использованы стандартные поля: {', '.join(columns)}")
+        else:
+            columns = tuple(col.strip() for col in columns_input.split(",") if col.strip())
+        
+
+        if not columns:
+            print("Ошибка: таблица должна иметь хотя бы одно поле.")
             return
+
         try:
-            self.current_table = StudentTable.create_table(name)
+            self.db.create_table(name, columns)
             self.current_table_name = name
             print(f"Таблица '{name}' создана и выбрана для работы.")
-        except ValueError as exc:
+            print(f"Поля таблицы: {', '.join(columns)}")
+        except TableAlreadyExistsError as exc:
             print(f"Ошибка: {exc}")
 
 
     def _select_table(self) -> None:
 
-        tables = StudentTable.list_tables()
-        if not tables:
-            print("Нет созданных таблиц. Сначала создайте таблицу (пункт 1).")
+        print("\n=== Выбор таблицы ===")
+        name = input("Введите имя таблицы: ").strip()
+        
+        if not name:
+            print("Ошибка: имя таблицы не может быть пустым.")
             return
-        print("\nДоступные таблицы:")
-        for i, name in enumerate(tables, 1):
-            print(f"  {i}. {name}")
-
-        try:
-            
-            choice = int(input("Выберите номер таблицы: "))
-            table_name = tables[choice - 1]
-            self.current_table = StudentTable(table_name)
-            self.current_table_name = table_name 
+        
+        if self.db.table_exists(name):
+            self.current_table_name = name
             print(f"Выбрана таблица: '{self.current_table_name}'")
-        except (ValueError, IndexError):
-            print("Неверный выбор!")
+        else:
+            print(f"Ошибка: таблица '{name}' не найдена.")
 
+    def _show_tables(self) -> None:
+        print("\n=== Список таблиц ===")
+        print("Для файловой базы данных таблицы — это файлы в папке 'data/'")
+        print("In-memory база данных не сохраняет таблицы между запусками.")
+        
+        if hasattr(self.db, 'tables'):
+            tables = list(self.db.tables.keys())
+            if tables:
+                for name in tables:
+                    print(f"  - {name}")
+            else:
+                print("Нет созданных таблиц.")
+        else:
+            print("Используется файловая БД. Проверьте папку 'data/' для просмотра таблиц.")
 
-    def _show_all_students(self) -> None:
+    def _show_all_records(self) -> None:
 
-        if self.current_table is None:
+        if self.current_table_name is None:
             print("Ошибка: сначала создайте или выберите таблицу.")
             return
         print(f"\nСписок записей в таблице '{self.current_table_name}'")
-        records = self.current_table.get_all()
-        self._print_records(records)
 
+        try:
+            records = self.db.get_all_records(self.current_table_name)
+            self._print_records(records)
+        except TableNotFoundError as exc:
+            print(f"Ошибка: {exc}")
 
     def _read_optional_int(self, prompt: str) -> int | None:
 
@@ -127,131 +202,158 @@ class Student_tui:
 
 
 
-    def _find_students_by_filter(self) -> None:
+    def _find_records(self) -> None:
 
-        if self.current_table is None:
+        if self.current_table_name is None:
             print("Ошибка: сначала создайте или выберите таблицу.")
             return
         
         print(f"\nПоиск по фильтру в таблице '{self.current_table_name}' (Enter = пропустить поле)")
 
+        filters = {}
+        
         student_id = self._read_optional_int("id: ")
-        first_name = input("first_name: ").strip() or None
-        second_name = input("second_name: ").strip() or None
+        if student_id is not None:
+            filters["id"] = student_id
+        
+        first_name = input("first_name: ").strip()
+        if first_name:
+            filters["first_name"] = first_name
+        
+        second_name = input("second_name: ").strip()
+        if second_name:
+            filters["second_name"] = second_name
+        
         age = self._read_optional_int("age: ")
-        sex_input = input("sex: ").strip()
+        if age is not None:
+            filters["age"] = age
+        
+        sex = input("sex: ").strip()
+        if sex:
+            filters["sex"] = sex.upper()
 
-        sex = sex_input.lower() if sex_input else None
-
-        records = self.current_table.select_record(
-            student_id=student_id,
-            first_name=first_name,
-            second_name=second_name,
-            age=age,
-            sex=sex,
-        )
-
-        self._print_records(records)
+        try:
+            records = self.db.select_records(self.current_table_name, **filters)
+            self._print_records(records)
+        except (TableNotFoundError, UnknownColumnError) as exc:
+            print(f"Ошибка: {exc}")
 
 
-    def _update_student(self) -> None:
+    def _update_record(self) -> None:
 
-        if self.current_table is None:
+        if self.current_table_name is None:
             print("Ошибка: сначала создайте или выберите таблицу.")
             return
         
-        print(f"\nОбновление записи в таблице '{self.current_table}'")
+        print(f"\nОбновление записи в таблице '{self.current_table_name}'")
 
-        student_id = self._read_int("Введите ID студента: ")
-        existing = self.current_table.select_record(student_id=student_id)
-        if not existing:
-            print(f"Ошибка: студент с ID= {student_id} не найден")
-            return
-        
-        print(f"Текущие данные: {existing[0]}")
-        print("\nОставьте поле пустым, чтобы не менять")
+        record_id = self._read_int("Введите ID записи: ")
 
-        new_first_name = input(f"Новое имя (было: {existing[0][1]}): ").strip()
-        new_second_name = input(f"Новая фамилия (было: {existing[0][2]}): ").strip()
-        new_age = input(f"Новый возраст (было: {existing[0][3]}): ").strip()
-        new_sex = input(f"Новый пол (было: {existing[0][4]}): ").strip()
-
-
-        changes = {}
-        if new_first_name:
-            changes['first_name'] = new_first_name
-        if new_second_name:
-            changes['second_name'] = new_second_name
-        if new_age:
-            try:
-                age_int = int(new_age)
-                if age_int < 0:
-                    print("Ошибка: возраст не может быть отрицательным")
-                    return
-                changes['age'] = age_int
-            except ValueError:
-                print("Ошибка: возраст должен быть целым числом")
-                return
-        if new_sex:
-            if new_sex not in ["M", "m", "F", "f"]:
-                print("Ошибка: пол должен быть 'M' или 'F'")
-                return
-            changes['sex'] = new_sex
-
-
-        if not changes:
-            print("Ничего не изменено")
-            return
-        
-        
         try:
-            updated =  self.current_table.update_record(student_id, **changes)
+            # Сначала проверим, существует ли запись
+            existing = self.db.select_records(self.current_table_name, id=record_id)
+            if not existing:
+                print(f"Ошибка: запись с ID={record_id} не найдена.")
+                return
+
+            print(f"Текущие данные: {existing[0]}")
+            print("\nОставьте поле пустым, чтобы не менять")
+
+            changes = {}
+            
+            new_first_name = input(f"Новое имя (было: {existing[0].get('first_name', '')}): ").strip()
+            if new_first_name:
+                changes["first_name"] = new_first_name
+            
+            new_second_name = input(f"Новая фамилия (было: {existing[0].get('second_name', '')}): ").strip()
+            if new_second_name:
+                changes["second_name"] = new_second_name
+            
+            new_age = input(f"Новый возраст (было: {existing[0].get('age', '')}): ").strip()
+            if new_age:
+                try:
+                    age_int = int(new_age)
+                    if age_int < 0:
+                        print("Ошибка: возраст не может быть отрицательным")
+                        return
+                    changes["age"] = age_int
+                except ValueError:
+                    print("Ошибка: возраст должен быть целым числом")
+                    return
+            
+            new_sex = input(f"Новый пол (было: {existing[0].get('sex', '')}): ").strip()
+            if new_sex:
+                sex_upper = new_sex.upper()
+                if sex_upper not in ["M", "F"]:
+                    print("Ошибка: пол должен быть 'M' или 'F'")
+                    return
+                changes["sex"] = sex_upper
+
+            if not changes:
+                print("Ничего не изменено")
+                return
+
+            updated = self.db.update_record(self.current_table_name, record_id, **changes)
             if updated:
                 print(f"Запись обновлена: {updated}")
             else:
                 print("Ошибка при обновлении")
-        except ValueError as exc:
+        except (TableNotFoundError, UnknownColumnError, ValueError) as exc:
             print(f"Ошибка: {exc}")
 
+    
 
-    def _delete_student(self) -> None:
+    def _delete_record(self) -> None:
 
-        if self.current_table is None:
+        if self.current_table_name is None:
             print("Ошибка: сначала создайте или выберите таблицу.")
             return
         
-        print(f"\nУдаление записи из таблицы '{self.current_table}'")
+        print(f"\nУдаление записи из таблицы '{self.current_table_name}'")
 
-        all_records = self.current_table.get_all()
-        if not all_records:
-            print("Таблица пуста.")
-            return
-        
-        print("\nВсе записи:")
-        for record in all_records:
-            print(f"  ID: {record[0]} - {record[1]} {record[2]}")
-        
+        try:
+            all_records = self.db.get_all_records(self.current_table_name)
+            if not all_records:
+                print("Таблица пуста.")
+                return
+            
+            print("\nВсе записи:")
+            for record in all_records:
+                print(f"  ID: {record.get('id')} - {record.get('first_name', '')} {record.get('second_name', '')}")
+            
 
-        student_id = self._read_int("\nВведите ID записи: ")
-        
-        existing = self.current_table.select_record(student_id=student_id)
-        if not existing:
-            print(f"Запись с ID={student_id} не найден.")
-            return
-        
-        print(f"\nЗапись для удаления: {existing[0]}")
-        confirm = input("Вы уверены? (y/n): ").strip().lower()
-        
-        if confirm == 'y' or confirm == 'yes' or confirm == 'да':
-            deleted = self.current_table.delete_record(student_id)
-            if deleted:
-                print(f"Запись с ID={student_id} успешно удалена.")
+            record_id = self._read_int("\nВведите ID записи: ")
+            
+            existing = self.db.select_records(self.current_table_name, id=record_id)
+            if not existing:
+                print(f"Запись с ID={record_id} не найден.")
+                return
+            
+            print(f"\nЗапись для удаления: {existing[0]}")
+            confirm = input("Вы уверены? (y/n): ").strip().lower()
+            
+            if confirm in ['y', 'yes', 'да']:
+                deleted = self.db.delete_record(self.current_table_name, record_id)
+                if deleted:
+                    print(f"Запись с ID={record_id} успешно удалена.")
+                else:
+                    print("Ошибка при удалении")
             else:
-                print("Ошибка при удалении")
-        else:
-            print("Удаление отменено.")
+                print("Удаление отменено.")
+        except TableNotFoundError as exc:
+            print(f"Ошибка: {exc}")
 
-
+    def _show_schema(self) -> None:
+            if self.current_table_name is None:
+                print("Ошибка: сначала создайте или выберите таблицу.")
+                return
+            
+            print(f"\nСтруктура таблицы '{self.current_table_name}'")
+            try:
+                columns = self.db.get_schema(self.current_table_name)
+                print(f"Поля: {', '.join(columns)}")
+            except Exception as e:
+                print(f"Ошибка: {e}")
 
     def run(self) -> None:
 
@@ -267,19 +369,25 @@ class Student_tui:
                 self._select_table()
 
             elif action == "3":
-                self._add_student()
+                self._show_tables()
 
             elif action == "4":
-                self._show_all_students()
+                self._add_record()
 
             elif action == "5":
-                self._find_students_by_filter()
-            
+                self._show_all_records()
+
             elif action == "6":
-                self._update_student()
+                self._find_records()
             
             elif action == "7":
-                self._delete_student()
+                self._update_record()
+            
+            elif action == "8":
+                self._delete_record()
+
+            elif action == "9":
+                self._show_schema()
 
             elif action == "0":
                 print("Выход из программы.")
@@ -289,5 +397,7 @@ class Student_tui:
                 print("Неизвестная команда. Повторите ввод.")
 
 def run() -> None:
-    app = Student_tui()
+    app = StudentTUI()
     app.run()
+
+
