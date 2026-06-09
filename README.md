@@ -5,45 +5,45 @@
 ## Структура проекта
 ```text
 pioa-m6o-122bv-25/
-├── data/ # JSON-файлы таблиц
-├── data_csv/ # CSV-файлы таблиц
+├── data/                          # Папка для JSON-файлов таблиц
+├── data_csv/                      # Папка для CSV-файлов таблиц
 ├── src/
-│ └── db/
-│ ├── init.py
-│ ├── main.py
-│ ├── tui.py # Текстовый интерфейс
-│ └── backend/
-│ ├── init.py
-│ ├── database.py # Абстрактный класс Database
-│ ├── errors.py # Пользовательские исключения
-│ ├── file.py # JSON-реализация (FileDatabase)
-│ ├── csv_file.py # CSV-реализация (CSVFileDatabase)
-│ ├── memory.py # In-memory реализация (MemoryDatabase)
-│ └── table.py # Класс Table
+│   └── db/
+│       ├── __init__.py
+│       ├── main.py                # Точка входа в приложение
+│       ├── tui.py                 # Текстовый пользовательский интерфейс (TUI)
+│       └── backend/
+│           ├── __init__.py
+│           ├── database.py        # Абстрактный базовый класс Database
+│           ├── errors.py          # Пользовательские исключения (ошибки СУБД)
+│           ├── file.py            # Реализация JSON-хранилища (FileDatabase)
+│           ├── csv_file.py        # Реализация CSV-хранилища (CSVFileDatabase)
+│           ├── memory.py          # Реализация In-memory хранилища (MemoryDatabase)
+│           └── table.py           # Класс Table (структура таблицы и записи)
 ├── tests/
-│ ├── init.py
-│ ├── test_memory.py
-│ ├── test_file_database.py
-│ ├── test_csv_file_database.py
-│ └── test_table.py
-└── README.md
+│   ├── __init__.py
+│   ├── test_memory.py             # Тесты для In-memory БД
+│   ├── test_file_database.py      # Тесты для JSON БД
+│   ├── test_csv_file_database.py  # Тесты для CSV БД
+│   └── test_table.py              # Тесты логики таблиц
+└── README.md                      # Документация проекта
 ```
 
 ## Назначение модулей
 
-**`src/db/backend/database.py`** — абстрактный класс, задающий общий интерфейс для всех реализаций БД.
+**`src/db/backend/database.py`** - Абстрактный класс, задающий единый контракт (интерфейс) для всех типов баз данных. Гарантирует одинаковое поведение методов независимо от формата хранения.
 
-**`src/db/backend/table.py`** — класс Table, отвечающий за структуру таблицы и операции над записями.
+**`src/db/backend/table.py`** - Класс `Table`, отвечающий за хранение структуры таблицы, метаданных и непосредственные операции над записями (поиск, добавление, удаление, обновление).
 
-**`src/db/backend/memory.py`** — in-memory реализация (данные хранятся в оперативной памяти и теряются после закрытия программы).
+**`src/db/backend/memory.py`** - Реализация БД в оперативной памяти (`MemoryDatabase`). Данные существуют только во время работы программы.
 
-**`src/db/backend/file.py`** — JSON-реализация (данные сохраняются в файлы JSON в папке `data/`).
+**`src/db/backend/file.py`** -Реализация БД с постоянным хранением в формате JSON (`FileDatabase`). Каждая таблица сохраняется как отдельный JSON-файл в каталоге `data/`.
 
-**`src/db/backend/csv_file.py`** — CSV-реализация (данные сохраняются в файлы CSV в папке `data_csv/`).
+**`src/db/backend/csv_file.py`** - Реализация БД с постоянным хранением в формате CSV (`CSVFileDatabase`). Данные сохраняются в каталоге `data_csv/`
 
-**`src/db/backend/errors.py`** — пользовательские исключения.
+**`src/db/backend/errors.py`** - пользовательские исключения.
 
-**`src/db/tui.py`** — текстовый интерфейс с выбором типа БД при запуске.
+**`src/db/tui.py`** - Модуль текстового интерфейса. Управляет вводом пользователя, выводом меню и валидацией данных перед отправкой в бэкенд..
 
 ## Функциональность
 
