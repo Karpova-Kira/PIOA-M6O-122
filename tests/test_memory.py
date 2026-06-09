@@ -11,12 +11,19 @@ class TestMemoryDatabase(unittest.TestCase):
     def test_create_table(self):
         self.db.create_table("students", ("id", "name", "age"))
         self.assertTrue(self.db._table_exists("students"))
+        self.assertIn("students", self.db.list_tables())
     
     def test_create_table_already_exists(self):
         self.db.create_table("students", ("id", "name"))
         with self.assertRaises(TableAlreadyExistsError):
             self.db.create_table("students", ("id", "name"))
     
+    def test_access_nonexistent_table_raises_error(self):
+        with self.assertRaises(TableNotFoundError):
+            self.db.select_records("ghost_table")
+        with self.assertRaises(TableNotFoundError):
+            self.db.insert_record("ghost_table", {"id": 1})
+
     def test_insert_and_select(self):
         self.db.create_table("students", ("id", "name", "age"))
         self.db.insert_record("students", {"id": 1, "name": "John", "age": 20})
@@ -38,14 +45,15 @@ class TestMemoryDatabase(unittest.TestCase):
         self.db.create_table("students", ("id", "name", "age"))
         self.db.insert_record("students", {"id": 1, "name": "John", "age": 20})
         
-        updated = self.db.update_record("students", 1, name="Jonathan")
+        updated = self.db.update_record("students","id", 1, name="Jonathan")
+        self.assertIsNotNone(updated)
         self.assertEqual(updated["name"], "Jonathan")
     
     def test_delete_record(self):
         self.db.create_table("students", ("id", "name", "age"))
         self.db.insert_record("students", {"id": 1, "name": "John", "age": 20})
         
-        result = self.db.delete_record("students", 1)
+        result = self.db.delete_record("students","id", 1)
         self.assertTrue(result)
         self.assertEqual(len(self.db.select_records("students")), 0)
 

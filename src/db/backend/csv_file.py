@@ -1,4 +1,3 @@
-# src/db/backend/csv_file.py
 
 import csv
 from pathlib import Path
@@ -16,8 +15,17 @@ class CSVFileDatabase(Database):
         self.directory = Path(directory)
         self.directory.mkdir(parents=True, exist_ok=True)
 
+    def list_tables(self) -> list[str]:
+        return [p.stem for p in self.directory.glob("*.csv")]
+
     def _table_exists(self, table_name: str) -> bool:
         return self._get_table_path(table_name).exists()
+
+    def _parse_value(self, value: str) -> Any:
+        val_strip = value.strip()
+        if val_strip.isdigit() or (val_strip.startswith(('-', '+')) and val_strip[1:].isdigit()):
+            return int(val_strip)
+        return value
 
     def _load_table(self, table_name: str) -> Table:
         table_path = self._get_table_path(table_name)
@@ -46,25 +54,18 @@ class CSVFileDatabase(Database):
                     record = {}
                     for i, column in enumerate(columns):
                         if i < len(row):
-                            value = row[i]
-                            if value.isdigit():
-                                record[column] = int(value)
-                            else:
-                                record[column] = value
+                            record[column] = self._parse_value(row[i])
                         else:
                             record[column] = ""
                     records.append(record)
-                
-                if not records and len(rows) == 1:
-                    return Table(columns, [])
                 
                 return Table(columns, records)
                 
         except (csv.Error, IndexError) as error:
             raise InvalidStorageDataError(
-                f"Ошибка при чтении CSV-файла '{table_name}': {error}"
-            ) from error
-
+                f"Ошибка при чтении CSV-файла '{table_name}': {error}") from error
+                
+       
     def _save_table(self, table_name: str, table: Table) -> None:
         table_path = self._get_table_path(table_name)
 

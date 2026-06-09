@@ -9,6 +9,9 @@ class MemoryDatabase(Database):
     def __init__(self) -> None:
         self.tables: dict[str, Table] = {}
 
+    def list_tables(self) -> list[str]:
+        return list(self.tables.keys())
+
     def _table_exists(self, table_name: str) -> bool:
         return table_name in self.tables
 

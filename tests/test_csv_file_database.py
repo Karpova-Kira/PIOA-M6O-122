@@ -27,6 +27,17 @@ class TestCSVFileDatabase(unittest.TestCase):
         with self.assertRaises(TableAlreadyExistsError):
             self.db.create_table("students", ("id", "name"))
     
+    def test_negative_numbers_parsing(self):
+        self.db.create_table("balance_sheets", ("id", "score"))
+        self.db.insert_record("balance_sheets", {"id": -100, "score": -25})
+        
+        new_db = CSVFileDatabase(self.temp_dir.name)
+        records = new_db.select_records("balance_sheets")
+        
+        self.assertEqual(records[0]["id"], -100)
+        self.assertEqual(records[0]["score"], -25)
+        self.assertIsInstance(records[0]["id"], int)
+
     def test_data_persists_between_instances(self):
         db1 = CSVFileDatabase(self.temp_dir.name)
         db1.create_table("students", ("id", "name"))
@@ -60,7 +71,7 @@ class TestCSVFileDatabase(unittest.TestCase):
         self.db.create_table("students", ("id", "name", "age"))
         self.db.insert_record("students", {"id": 1, "name": "John", "age": 20})
         
-        updated = self.db.update_record("students", 1, name="Jonathan", age=21)
+        updated = self.db.update_record("students","id", 1, name="Jonathan", age=21)
         self.assertEqual(updated["name"], "Jonathan")
         self.assertEqual(updated["age"], 21)
         
@@ -72,7 +83,7 @@ class TestCSVFileDatabase(unittest.TestCase):
         self.db.insert_record("students", {"id": 1, "name": "John", "age": 20})
         self.db.insert_record("students", {"id": 2, "name": "Jane", "age": 22})
         
-        result = self.db.delete_record("students", 1)
+        result = self.db.delete_record("students","id", 1)
         self.assertTrue(result)
         
         records = self.db.select_records("students")
@@ -83,7 +94,7 @@ class TestCSVFileDatabase(unittest.TestCase):
         self.db.create_table("students", ("id", "name"))
         self.db.insert_record("students", {"id": 1, "name": "John"})
         
-        result = self.db.delete_record("students", 999)
+        result = self.db.delete_record("students","id", 999)
         self.assertFalse(result)
         
         records = self.db.select_records("students")

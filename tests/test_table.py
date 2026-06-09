@@ -28,16 +28,25 @@ class TestTable(unittest.TestCase):
         table = Table(("id", "name", "age"))
         table.insert_record({"id": 1, "name": "John", "age": 20})
         
-        updated = table.update_record(1, name="Jonathan", age=21)
+        updated = table.update_record("id", 1, name="Jonathan", age=21)
+        self.assertIsNotNone(updated)
         self.assertEqual(updated["name"], "Jonathan")
         self.assertEqual(updated["age"], 21)
+
+    def test_update_record_unknown_fields(self):
+        table = Table(("id", "name"))
+        table.insert_record({"id": 1, "name": "John"})
+        with self.assertRaises(UnknownColumnError):
+            table.update_record("id", 1, unknown_field="test")
+        with self.assertRaises(UnknownColumnError):
+            table.update_record("wrong_key", 1, name="Test")
     
     def test_delete_record(self):
         table = Table(("id", "name", "age"))
         table.insert_record({"id": 1, "name": "John", "age": 20})
         table.insert_record({"id": 2, "name": "Jane", "age": 22})
         
-        result = table.delete_record(1)
+        result = table.delete_record("id", 1)
         self.assertTrue(result)
         self.assertEqual(len(table.records), 1)
         self.assertEqual(table.records[0]["id"], 2)

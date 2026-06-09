@@ -13,6 +13,9 @@ class FileDatabase(Database):
         self.directory = Path(directory)
         self.directory.mkdir(parents=True, exist_ok=True)
 
+    def list_tables(self) -> list[str]:
+        return [p.stem for p in self.directory.glob("*.json")]
+
     def _table_exists(self, table_name: str) -> bool:
         return self._get_table_path(table_name).exists()
 
@@ -30,6 +33,11 @@ class FileDatabase(Database):
             raise InvalidStorageDataError(
                 "Файл таблицы содержит некорректный JSON."
             ) from error
+        except OSError as error:
+            raise InvalidStorageDataError(f"Ошибка ввода-вывода при чтении файла: {error}") from error
+
+        if not isinstance(data, dict):
+            raise InvalidStorageDataError("Некорректная структура JSON: корневой элемент должен быть объектом.")
 
         return self._deserialize_table(data)
 
@@ -50,7 +58,7 @@ class FileDatabase(Database):
     def _serialize_table(self, table: Table) -> dict:
         return {
             "columns": list(table.columns),
-            "records": [record.copy() for record in table.records],
+            "records": table.records,
         }
 
     def _deserialize_table(self, data: dict) -> Table:

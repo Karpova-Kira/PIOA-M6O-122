@@ -25,30 +25,28 @@ class Database(ABC):
         table = self._load_table(table_name)
         return table.select_records(**filters)
     
-    def update_record(self, table_name: str, record_id: int, **kwargs: Any) -> dict[str, Any] | None:
-        """Обновляет запись в таблице по ID."""
+    def update_record(self, table_name: str, key_column: str, key_value: Any, **kwargs: Any) -> dict[str, Any] | None:
         table = self._load_table(table_name)
-        result = table.update_record(record_id, **kwargs)
+        result = table.update_record(key_column, key_value, **kwargs)
         if result is not None:
             self._save_table(table_name, table)
         return result
 
-    def delete_record(self, table_name: str, record_id: int) -> bool:
-        """Удаляет запись из таблицы по ID."""
+    def delete_record(self, table_name: str, key_column: str, key_value: Any) -> bool:
         table = self._load_table(table_name)
-        result = table.delete_record(record_id)
+        result = table.delete_record(key_column, key_value)
         if result:
             self._save_table(table_name, table)
         return result
 
     def get_all_records(self, table_name: str) -> list[dict[str, Any]]:
-        """Возвращает все записи таблицы."""
         table = self._load_table(table_name)
         return table.get_all()
 
     @abstractmethod
     def _table_exists(self, table_name: str) -> bool:
         """Проверяет наличие таблицы."""
+
 
     @abstractmethod
     def _load_table(self, table_name: str) -> Table:

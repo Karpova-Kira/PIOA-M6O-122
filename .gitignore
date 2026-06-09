@@ -1,5 +1,6 @@
 # Python cache
 __pycache__/
+.pytest_cache/
 *.pyc
 *.pyo
 *.pyd
@@ -14,3 +15,5 @@ venv/
 
 
 .coverage
+data/
+data_csv/

@@ -1,12 +1,12 @@
 from .backend.errors import (
     TableAlreadyExistsError, TableNotFoundError,
-    MissingColumnError, UnknownColumnError, InvalidStorageDataError
+    MissingColumnError, UnknownColumnError
 )
-from src.db.backend.file import FileDatabase
-from src.db.backend.memory import MemoryDatabase
+from .backend.file import FileDatabase
+from .backend.memory import MemoryDatabase
 from .backend.csv_file import CSVFileDatabase
 
-class StudentTUI:
+class DatabaseTUI:
 
     def __init__(self, skip_db_choice: bool = False):
         self.current_table_name: str | None = None
@@ -33,7 +33,7 @@ class StudentTUI:
     
 
     def _print_menu(self) -> None:
-        print("\n=== База студентов ===")
+        print("\n=== База данных ===")
         print("1. Создать таблицу")
         print("2. Выбрать/сменить таблицу")
         print("3. Показать все таблицы")
@@ -58,11 +58,16 @@ class StudentTUI:
                 print("Ошибка: введите целое число.")
 
     def _read_string(self, prompt: str) -> str:
-            while True:
-                raw = input(prompt).strip()
-                if raw:
-                    return raw
-                print("Ошибка: поле не может быть пустым.")
+        while True:
+            raw = input(prompt).strip()
+            if raw:
+                return raw
+            print("Ошибка: поле не может быть пустым.")
+
+    def _parse_input_value(self, raw: str) -> any:
+            if raw.isdigit() or (raw.startswith(('-', '+')) and raw[1:].isdigit()):
+                return int(raw)
+            return raw
 
     def _add_record(self) -> None:
 
@@ -73,37 +78,50 @@ class StudentTUI:
         print(f"\nДобавление записи в таблицу '{self.current_table_name}'")
         
         try:
-            if hasattr(self.db, 'get_schema'):
-                schema = self.db.get_schema(self.current_table_name)
-            elif hasattr(self.db, '_load_table'):
-                table = self.db._load_table(self.current_table_name)
-                schema = table.columns
-            else:
-                print("Предупреждение: не удалось получить схему таблицы.")
-                print("Используются стандартные поля: id, first_name, second_name, age, sex")
-                schema = ("id", "first_name", "second_name", "age", "sex")
+            columns = self.db.get_schema(self.current_table_name)
         except Exception as e:
-            print(f"Не удалось получить схему таблицы: {e}")
-            schema = ("id", "first_name", "second_name", "age", "sex")
+            print(f"Ошибка при получении схемы: {e}")
+            return
         
         record = {}
-        for column in schema:
-            if column == "id":
-                record[column] = self._read_int(f"{column}: ")
-            elif column in ["age", "year"]:
-                record[column] = self._read_int(f"{column}: ")
-            elif column in ["sex", "gender"]:
-                value = self._read_string(f"{column} (M/F): ")
-                record[column] = value.upper()
-            else:
-                record[column] = self._read_string(f"{column}: ")
+        for column in columns:
+            col_lower = column.lower().strip()
+            
+            while True:
+                raw_val = input(f"Введите значение для '{column}': ").strip()
+                
+                if col_lower in ('sex', 'gender', 'пол'):
+                    val_check = raw_val.lower()
+                    if val_check in ('m', 'f', 'м', 'ж'):
+                        record[column] = 'm' if val_check in ('m', 'м') else 'f'
+                        break
+                    else:
+                        print("Ошибка: для этого поля допустимы только значения 'm' или 'f' (м/ж)!")
+                
+
+                elif col_lower in ('age', 'возраст'):
+                    parsed_val = self._parse_input_value(raw_val)
+                    if isinstance(parsed_val, int):
+                        if parsed_val >= 0:
+                            record[column] = parsed_val
+                            break
+                        else:
+                            print("Ошибка: возраст не может быть отрицательным!")
+                    else:
+                        print("Ошибка: возраст должен быть целым числом!")
+                else:
+                    if not raw_val:
+                        print("Ошибка: значение не может быть пустым.")
+                        continue
+                    
+                    record[column] = self._parse_input_value(raw_val)
+                    break            
 
         try:
             self.db.insert_record(self.current_table_name, record)
-            print(f"Запись добавлена: {record}")
-        except (MissingColumnError, UnknownColumnError, ValueError) as exc:
+            print(f"Запись успешно добавлена: {record}")
+        except (MissingColumnError, UnknownColumnError) as exc:
             print(f"Ошибка: {exc}")
-
 
     def _print_records(self, records: list) -> None:
 
@@ -125,11 +143,10 @@ class StudentTUI:
         columns_input = input("Поля: ").strip()
         
         if not columns_input:
-            columns = ("id", "first_name", "second_name", "age", "sex")
-            print(f"Использованы стандартные поля: {', '.join(columns)}")
-        else:
-            columns = tuple(col.strip() for col in columns_input.split(",") if col.strip())
+           print("Ошибка: нужно указать хотя бы одно поле.")
+           return
         
+        columns = tuple(col.strip() for col in columns_input.split(",") if col.strip())
 
         if not columns:
             print("Ошибка: таблица должна иметь хотя бы одно поле.")
@@ -161,18 +178,15 @@ class StudentTUI:
 
     def _show_tables(self) -> None:
         print("\n=== Список таблиц ===")
-        print("Для файловой базы данных таблицы — это файлы в папке 'data/'")
-        print("In-memory база данных не сохраняет таблицы между запусками.")
-        
-        if hasattr(self.db, 'tables'):
-            tables = list(self.db.tables.keys())
+        try:
+            tables = self.db.list_tables()
             if tables:
                 for name in tables:
                     print(f"  - {name}")
             else:
                 print("Нет созданных таблиц.")
-        else:
-            print("Используется файловая БД. Проверьте папку 'data/' для просмотра таблиц.")
+        except Exception as e:
+            print(f"Ошибка при получении списка таблиц: {e}")
 
     def _show_all_records(self) -> None:
 
@@ -207,30 +221,14 @@ class StudentTUI:
         if self.current_table_name is None:
             print("Ошибка: сначала создайте или выберите таблицу.")
             return
-        
-        print(f"\nПоиск по фильтру в таблице '{self.current_table_name}' (Enter = пропустить поле)")
 
+        print(f"\nПоиск по фильтру в таблице '{self.current_table_name}' (Enter = пропустить поле)")
+        columns = self.db.get_schema(self.current_table_name)
         filters = {}
-        
-        student_id = self._read_optional_int("id: ")
-        if student_id is not None:
-            filters["id"] = student_id
-        
-        first_name = input("first_name: ").strip()
-        if first_name:
-            filters["first_name"] = first_name
-        
-        second_name = input("second_name: ").strip()
-        if second_name:
-            filters["second_name"] = second_name
-        
-        age = self._read_optional_int("age: ")
-        if age is not None:
-            filters["age"] = age
-        
-        sex = input("sex: ").strip()
-        if sex:
-            filters["sex"] = sex.upper()
+        for column in columns:
+            raw_val = input(f"{column}: ").strip()
+            if raw_val:
+                filters[column] = self._parse_input_value(raw_val)
 
         try:
             records = self.db.select_records(self.current_table_name, **filters)
@@ -238,71 +236,54 @@ class StudentTUI:
         except (TableNotFoundError, UnknownColumnError) as exc:
             print(f"Ошибка: {exc}")
 
-
     def _update_record(self) -> None:
 
         if self.current_table_name is None:
             print("Ошибка: сначала создайте или выберите таблицу.")
             return
         
+        columns = self.db.get_schema(self.current_table_name)
         print(f"\nОбновление записи в таблице '{self.current_table_name}'")
 
-        record_id = self._read_int("Введите ID записи: ")
+        key_column = input(f"Выберите ключевое поле для поиска записи {columns}: ").strip()
+        if key_column not in columns:
+            print("Ошибка: такого поля нет в таблице.")
+            return
+            
+        raw_key_value = input(f"Введите значение поля '{key_column}': ").strip()
+        key_value = self._parse_input_value(raw_key_value)
+
+        search_filter = {key_column: key_value}
+        existing_records = self.db.select_records(self.current_table_name, **search_filter)
+        if not existing_records:
+            print("Ошибка: запись с такими критериями не найдена.")
+            return
+        
+        existing = existing_records[0]
+        print(f"Текущие данные: {existing}")
+        print("Оставьте поле пустым, чтобы не изменять его.")
+
+        changes = {}
+        for column in columns:
+            if column == key_column:
+                continue
+            raw_val = input(f"Новое {column} (было: {existing.get(column, '')}): ").strip()
+            if raw_val:
+                changes[column] = self._parse_input_value(raw_val)
+
+        if not changes:
+            print("Ничего не изменено.")
+            return
 
         try:
-            # Сначала проверим, существует ли запись
-            existing = self.db.select_records(self.current_table_name, id=record_id)
-            if not existing:
-                print(f"Ошибка: запись с ID={record_id} не найдена.")
-                return
-
-            print(f"Текущие данные: {existing[0]}")
-            print("\nОставьте поле пустым, чтобы не менять")
-
-            changes = {}
-            
-            new_first_name = input(f"Новое имя (было: {existing[0].get('first_name', '')}): ").strip()
-            if new_first_name:
-                changes["first_name"] = new_first_name
-            
-            new_second_name = input(f"Новая фамилия (было: {existing[0].get('second_name', '')}): ").strip()
-            if new_second_name:
-                changes["second_name"] = new_second_name
-            
-            new_age = input(f"Новый возраст (было: {existing[0].get('age', '')}): ").strip()
-            if new_age:
-                try:
-                    age_int = int(new_age)
-                    if age_int < 0:
-                        print("Ошибка: возраст не может быть отрицательным")
-                        return
-                    changes["age"] = age_int
-                except ValueError:
-                    print("Ошибка: возраст должен быть целым числом")
-                    return
-            
-            new_sex = input(f"Новый пол (было: {existing[0].get('sex', '')}): ").strip()
-            if new_sex:
-                sex_upper = new_sex.upper()
-                if sex_upper not in ["M", "F"]:
-                    print("Ошибка: пол должен быть 'M' или 'F'")
-                    return
-                changes["sex"] = sex_upper
-
-            if not changes:
-                print("Ничего не изменено")
-                return
-
-            updated = self.db.update_record(self.current_table_name, record_id, **changes)
+            updated = self.db.update_record(self.current_table_name, key_column, key_value, **changes)
             if updated:
                 print(f"Запись обновлена: {updated}")
             else:
-                print("Ошибка при обновлении")
-        except (TableNotFoundError, UnknownColumnError, ValueError) as exc:
+                print("Ошибка при обновлении.")
+        except Exception as exc:
             print(f"Ошибка: {exc}")
-
-    
-
+        
     def _delete_record(self) -> None:
 
         if self.current_table_name is None:
@@ -312,30 +293,27 @@ class StudentTUI:
         print(f"\nУдаление записи из таблицы '{self.current_table_name}'")
 
         try:
-            all_records = self.db.get_all_records(self.current_table_name)
-            if not all_records:
-                print("Таблица пуста.")
+            columns = self.db.get_schema(self.current_table_name)            
+            key_column = input(f"Выберите ключевое поле для поиска записи {columns}: ").strip()
+            if key_column not in columns:
+                print("Ошибка: такого поля нет в таблице.")
                 return
-            
-            print("\nВсе записи:")
-            for record in all_records:
-                print(f"  ID: {record.get('id')} - {record.get('first_name', '')} {record.get('second_name', '')}")
-            
+                
+            raw_key_value = input(f"Введите значение поля '{key_column}': ").strip()
+            key_value = self._parse_input_value(raw_key_value)
 
-            record_id = self._read_int("\nВведите ID записи: ")
-            
-            existing = self.db.select_records(self.current_table_name, id=record_id)
+            search_filter = {key_column: key_value}
+            existing = self.db.select_records(self.current_table_name, **search_filter)
             if not existing:
-                print(f"Запись с ID={record_id} не найден.")
+                print(f"Запись не найдена.")
                 return
             
             print(f"\nЗапись для удаления: {existing[0]}")
             confirm = input("Вы уверены? (y/n): ").strip().lower()
             
             if confirm in ['y', 'yes', 'да']:
-                deleted = self.db.delete_record(self.current_table_name, record_id)
-                if deleted:
-                    print(f"Запись с ID={record_id} успешно удалена.")
+                if self.db.delete_record(self.current_table_name, key_column, key_value):                    
+                    print(f"Запись удалена.")
                 else:
                     print("Ошибка при удалении")
             else:
@@ -343,14 +321,15 @@ class StudentTUI:
         except TableNotFoundError as exc:
             print(f"Ошибка: {exc}")
 
+
     def _show_schema(self) -> None:
             if self.current_table_name is None:
                 print("Ошибка: сначала создайте или выберите таблицу.")
                 return
             
-            print(f"\nСтруктура таблицы '{self.current_table_name}'")
             try:
-                columns = self.db.get_schema(self.current_table_name)
+                columns = self.db.get_schema(self.current_table_name)    
+                print(f"\nСтруктура таблицы '{self.current_table_name}':")
                 print(f"Поля: {', '.join(columns)}")
             except Exception as e:
                 print(f"Ошибка: {e}")
@@ -397,7 +376,7 @@ class StudentTUI:
                 print("Неизвестная команда. Повторите ввод.")
 
 def run() -> None:
-    app = StudentTUI()
+    app = DatabaseTUI()
     app.run()
 
 

@@ -1,14 +1,17 @@
-class StudentTableError(Exception):
+class DatabaseError(Exception):
     """Базовый класс для ошибок, связанных с таблицей Student."""
     pass
 
+class TableValidationError(DatabaseError):
+    """Базовый класс для ошибок валидации данных внутри записи."""
+    pass
 
-class InvalidAgeError(StudentTableError):
+class InvalidAgeError(DatabaseError):
     """Ошибка, возникающая при попытке создать запись с некорректным возрастом."""
     pass
 
 
-class DuplicateIDError(StudentTableError):
+class DuplicateIDError(DatabaseError):
     """Ошибка, возникающая при попытке создать запись с уже существующим идентификатором."""
     pass
 
