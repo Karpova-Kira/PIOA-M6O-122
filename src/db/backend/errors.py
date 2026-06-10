@@ -15,12 +15,6 @@ class DuplicateIDError(DatabaseError):
     """Ошибка, возникающая при попытке создать запись с уже существующим идентификатором."""
     pass
 
-
-class DatabaseError(Exception):
-    """Базовый класс для ошибок базы данных."""
-    pass
-
-
 class TableAlreadyExistsError(DatabaseError):
     """Ошибка, возникающая при попытке создать уже существующую таблицу."""
     pass
