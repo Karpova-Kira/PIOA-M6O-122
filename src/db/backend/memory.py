@@ -1,5 +1,5 @@
 
-from .errors import TableAlreadyExistsError, UnknownColumnError, MissingColumnError, TableNotFoundError
+from .errors import TableAlreadyExistsError, UnknownColumnError, MissingColumnError, TableNotFoundError, DuplicateIDError
 from typing import Any, Optional
 
 
@@ -28,7 +28,7 @@ class Table:
         if 'id' in clean_record:
             for rec in self._records:
                 if 'id' in rec and rec['id'] == clean_record['id']:
-                    raise ValueError(f"Запись с id={clean_record['id']} уже существует.")
+                    raise DuplicateIDError(f"Запись с id={clean_record['id']} уже существует.")
 
         self._records.append(clean_record)
         return clean_record

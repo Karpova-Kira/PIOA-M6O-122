@@ -18,9 +18,6 @@ class UnknownColumnError(DatabaseError):
 class MissingColumnError(DatabaseError):
     """В записи отсутствуют обязательные для таблицы колонки."""
     pass
-class InvalidAgeError(DatabaseError):
-    """Ошибка, возникающая при попытке создать запись с некорректным возрастом."""
-    pass
 
 class DuplicateIDError(DatabaseError):
     """Ошибка, возникающая при попытке создать запись с уже существующим идентификатором."""
