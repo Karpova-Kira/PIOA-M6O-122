@@ -1,0 +1,28 @@
+{
+  "columns": [
+    "id",
+    "name",
+    "sex",
+    "index"
+  ],
+  "records": [
+    {
+      "id": 1,
+      "name": "fhgjh",
+      "sex": "m",
+      "index": 567585
+    },
+    {
+      "id": 2,
+      "name": "tghgkbh",
+      "sex": "m",
+      "index": 67
+    },
+    {
+      "id": 3,
+      "name": "glkdig",
+      "sex": "f",
+      "index": 28
+    }
+  ]
+}

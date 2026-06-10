@@ -1,65 +1,124 @@
-type StudentRecord = tuple[int, str, str, int, str]
 
-Student: list[StudentRecord] = []
+from .errors import TableAlreadyExistsError, UnknownColumnError, MissingColumnError, TableNotFoundError, DuplicateIDError
+from typing import Any, Optional
 
-def create_record(
-    student_id: int,   # Уникальный идентификатор записи
-    first_name: str,   # Имя
-    second_name: str,  # Фамилия
-    age: int,          # Возраст
-    sex: str,          # Пол
-) -> StudentRecord:
 
-    if age < 0:
-        raise ValueError("Поле age не может быть отрицательным.")
+
+
+class Table:
+
+    def __init__(self, table_name: str, columns: list[str]) -> None:
+        self.table_name = table_name
+        self.columns = [col.strip().lower() for col in columns]
+        self._records: list[dict[str, Any]] = []
+        
+    def get_schema(self) -> list[str]:
+        return self.columns
+
+    def create_record(self, record: dict[str, Any]) -> dict[str, Any]:
+        clean_record = {k.strip().lower(): v for k, v in record.items()}
+        for key in clean_record:
+            if key not in self.columns:
+                raise UnknownColumnError(f"Колонка '{key}' отсутствует в схеме таблицы.")
+
+        for col in self.columns:
+            if col not in clean_record:
+                raise MissingColumnError(f"Пропущена обязательная колонка: '{col}'.")
+
+        if 'id' in clean_record:
+            for rec in self._records:
+                if 'id' in rec and rec['id'] == clean_record['id']:
+                    raise DuplicateIDError(f"Запись с id={clean_record['id']} уже существует.")
+
+        self._records.append(clean_record)
+        return clean_record
+        
+
+    def select_record(self, filters: dict[str, Any]) -> list[dict[str, Any]]:
+
+        clean_filters = {k.strip().lower(): v for k, v in filters.items() if v is not None}
+
+        for key in clean_filters:
+            if key not in self.columns:
+                raise UnknownColumnError(f"Неизвестная колонка в фильтре: '{key}'.")
+
+        if not clean_filters:
+            return [rec.copy() for rec in self._records]
+
+        result = []
+        for rec in self._records:
+            match = True
+            for k, v in clean_filters.items():
+                if isinstance(rec[k], str) and isinstance(v, str):
+                    if rec[k].lower() != v.lower():
+                        match = False
+                        break
+                elif rec[k] != v:
+                    match = False
+                    break
+            if match:
+                result.append(rec.copy())
+
+        return result
+        
+
+    def get_all(self) -> list[dict[str, Any]]:
+        return [rec.copy() for rec in self._records]
+
     
-    if any(record[0] == student_id for record in Student):
-        raise ValueError(f"Запись с id={student_id} уже существует.")
+    def update_record(self, record_id:Any, changes: dict[str, Any]) -> Optional[dict[str, Any]]:
+        if 'id' not in self.columns:
+            raise UnknownColumnError("В таблице нет колонки 'id' для обновления.")
 
-    new_record: StudentRecord = (
-        student_id,
-        first_name.strip(),
-        second_name.strip(),
-        age,
-        sex.strip(),
-    )
+        clean_changes = {k.strip().lower(): v for k, v in changes.items() if v is not None}
+        for key in clean_changes:
+            if key not in self.columns:
+                raise UnknownColumnError(f"Неизвестная колонка '{key}'.")
 
-    Student.append(new_record)
-    return new_record
+        for rec in self._records:
+            if rec.get('id') == record_id:
+                for k, v in clean_changes.items():
+                    rec[k] = v
+                return rec.copy()
+        return None
 
+    def delete_record(self, record_id: int) -> bool:
+        if 'id' not in self.columns:
+            raise UnknownColumnError("В таблице нет колонки 'id' для удаления.")
 
-def select_record(
-    student_id: int | None = None,   # Фильтр по идентификатору
-    first_name: str | None = None,   # Фильтр по имени
-    second_name: str | None = None,  # Фильтр по фамилии
-    age: int | None = None,          # Фильтр по возрасту
-    sex: str | None = None,          # Фильтр по полу
-) -> list[StudentRecord]:
+        for i, rec in enumerate(self._records):
+            if rec.get('id') == record_id:
+                del self._records[i]
+                return True
+        return False
 
-    if (
-        student_id is None
-        and first_name is None
-        and second_name is None
-        and age is None
-        and sex is None
-    ):
-        return Student.copy()
-    result: list[StudentRecord] = []
+class MemoryDatabase:
 
-    for record in Student:
-        if student_id is not None and record[0] != student_id:
-            continue
+    def __init__(self) -> None:
+        self.tables: dict[str, Table] = {}
 
-        if first_name is not None and record[1] != first_name:
-            continue
+    def create_table(self, table_name: str, columns: list[str]) -> Table:
+        name_clean = table_name.strip()
+        if self._table_exists(name_clean):
+            raise TableAlreadyExistsError(f"Таблица '{name_clean}' уже существует.")
+        if not columns:
+            raise ValueError("Таблица должна содержать хотя бы одну領колонку.")
 
-        if second_name is not None and record[2] != second_name:
-            continue
+        new_table = Table(name_clean, columns)
+        self.tables[name_clean] = new_table
+        return new_table
 
-        if age is not None and record[3] != age:
-            continue
+    def get_table(self, table_name: str) -> Table:
+        name_clean = table_name.strip()
+        if not self._table_exists(name_clean):
+            raise TableNotFoundError(f"Таблица '{name_clean}' не найдена.")
+        return self.tables[name_clean]
 
-        if sex is not None and record[4] != sex:
-            continue
-        result.append(record)
-    return result
+    def list_tables(self) -> list[str]:
+        return list(self.tables.keys())
+
+    def _table_exists(self, table_name: str) -> bool:
+        return table_name in self.tables
+
+    def clear(self) -> None:
+        self.tables.clear()
