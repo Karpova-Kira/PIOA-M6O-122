@@ -1,10 +1,11 @@
 from .backend.errors import (
     TableAlreadyExistsError, TableNotFoundError,
-    MissingColumnError, UnknownColumnError
+    MissingColumnError, UnknownColumnError, InvalidStorageDataError, DuplicateIDError
 )
 from .backend.file import FileDatabase
 from .backend.memory import MemoryDatabase
 from .backend.csv_file import CSVFileDatabase
+from typing import Any
 
 class DatabaseTUI:
 
@@ -64,7 +65,16 @@ class DatabaseTUI:
                 return raw
             print("Ошибка: поле не может быть пустым.")
 
-    def _parse_input_value(self, raw: str) -> any:
+    def _print_records(self, records: list[dict[str, Any]]) -> None:
+        if not records:
+            print("(таблица пуста или записей по фильтру не найдено)")
+            return
+            
+        for idx, record in enumerate(records, start=1):
+            row_str = ", ".join(f"{key}: {val}" for key, val in record.items())
+            print(f"  {idx}. {row_str}")
+
+    def _parse_input_value(self, raw: str) -> Any:
             if raw.isdigit() or (raw.startswith(('-', '+')) and raw[1:].isdigit()):
                 return int(raw)
             return raw
@@ -78,59 +88,45 @@ class DatabaseTUI:
         print(f"\nДобавление записи в таблицу '{self.current_table_name}'")
         
         try:
-            columns = self.db.get_schema(self.current_table_name)
-        except Exception as e:
-            print(f"Ошибка при получении схемы: {e}")
+            schema = self.db.get_schema(self.current_table_name)
+        except TableNotFoundError as e:
+            print(f"Ошибка: {e}")
+            return
+        except InvalidStorageDataError as e:
+            print(f"Ошибка работы с хранилищем при чтении схемы: {e}")
             return
         
         record = {}
-        for column in columns:
-            col_lower = column.lower().strip()
+        print("Заполните поля таблицы (для типа int вводите только цифры):")
+        for col_name, col_type in schema.items():
+            raw_input = input(f"  {col_name} ({col_type}): ").strip()
             
-            while True:
-                raw_val = input(f"Введите значение для '{column}': ").strip()
+            if not raw_input:
+                record[col_name] = ""
+                continue
                 
-                if col_lower in ('sex', 'gender', 'пол'):
-                    val_check = raw_val.lower()
-                    if val_check in ('m', 'f', 'м', 'ж'):
-                        record[column] = 'm' if val_check in ('m', 'м') else 'f'
-                        break
-                    else:
-                        print("Ошибка: для этого поля допустимы только значения 'm' или 'f' (м/ж)!")
-                
-
-                elif col_lower in ('age', 'возраст'):
-                    parsed_val = self._parse_input_value(raw_val)
-                    if isinstance(parsed_val, int):
-                        if parsed_val >= 0:
-                            record[column] = parsed_val
-                            break
-                        else:
-                            print("Ошибка: возраст не может быть отрицательным!")
-                    else:
-                        print("Ошибка: возраст должен быть целым числом!")
-                else:
-                    if not raw_val:
-                        print("Ошибка: значение не может быть пустым.")
-                        continue
-                    
-                    record[column] = self._parse_input_value(raw_val)
-                    break            
+            if col_type == "int":
+                try:
+                    record[col_name] = int(raw_input)
+                except ValueError:
+                    record[col_name] = raw_input
+            else:
+                record[col_name] = raw_input
 
         try:
             self.db.insert_record(self.current_table_name, record)
-            print(f"Запись успешно добавлена: {record}")
-        except (MissingColumnError, UnknownColumnError) as exc:
-            print(f"Ошибка: {exc}")
-
-    def _print_records(self, records: list) -> None:
-
-        if not records:
-            print("Записи не найдены.")
-            return
-
-        for record in records:
-            print(record)
+            print("\n[Успех] Запись успешно добавлена.")
+            
+        except (UnknownColumnError, MissingColumnError) as e:
+            print(f"\n[Ошибка схемы]: {e}")
+        except TypeError as e:
+            print(f"\n[Ошибка типов данных]: {e}")
+        except DuplicateIDError as e:
+            print(f"\n[Ошибка уникальности]: {e}")
+        except TableNotFoundError as e:
+            print(f"\n[Ошибка таблицы]: {e}")
+        except InvalidStorageDataError as e:
+            print(f"\n[Критическая ошибка диска]: Ошибка при записи файла таблицы: {e}")
 
 
 
@@ -139,25 +135,41 @@ class DatabaseTUI:
         print("\n=== Создание таблицы ===")
         name = self._read_string("Название таблицы: ")
 
-        print("Введите названия полей через запятую (например: id,name,age)")
+        print("Введите поля и типы через запятую (например: id:int,name:str,age:int)")
         columns_input = input("Поля: ").strip()
         
         if not columns_input:
-           print("Ошибка: нужно указать хотя бы одно поле.")
-           return
-        
-        columns = tuple(col.strip() for col in columns_input.split(",") if col.strip())
+            print("Ошибка: нужно указать хотя бы одно поле.")
+            return
+
+        columns = {}
+        for item in columns_input.split(","):
+            if not item.strip():
+                continue
+            if ":" in item:
+                col_name, col_type = item.split(":", 1)
+                col_name = col_name.strip()
+                col_type = col_type.strip().lower()
+                if col_type not in ("int", "str"):
+                    col_type = "str"  
+            else:
+                col_name = item.strip()
+                col_type = "str"  
+                
+            if col_name:
+                columns[col_name] = col_type
 
         if not columns:
-            print("Ошибка: таблица должна иметь хотя бы одно поле.")
+            print("Ошибка: таблица должна иметь хотя бы одно валидное поле.")
             return
 
         try:
             self.db.create_table(name, columns)
             self.current_table_name = name
-            print(f"Таблица '{name}' создана и выбрана для работы.")
-            print(f"Поля таблицы: {', '.join(columns)}")
-        except TableAlreadyExistsError as exc:
+            print(f"Таблица '{name}' успешно создана и выбрана.")
+            schema_str = ", ".join([f"{k} ({v})" for k, v in columns.items()])
+            print(f"Структура: {schema_str}")
+        except (TableAlreadyExistsError, InvalidStorageDataError) as exc:
             print(f"Ошибка: {exc}")
 
 
@@ -185,22 +197,22 @@ class DatabaseTUI:
                     print(f"  - {name}")
             else:
                 print("Нет созданных таблиц.")
-        except Exception as e:
+        except InvalidStorageDataError as e:
             print(f"Ошибка при получении списка таблиц: {e}")
 
     def _show_all_records(self) -> None:
-
         if self.current_table_name is None:
             print("Ошибка: сначала создайте или выберите таблицу.")
             return
+            
         print(f"\nСписок записей в таблице '{self.current_table_name}'")
 
         try:
             records = self.db.get_all_records(self.current_table_name)
-            self._print_records(records)
+            self._print_records(records)  
         except TableNotFoundError as exc:
             print(f"Ошибка: {exc}")
-
+    
     def _read_optional_int(self, prompt: str) -> int | None:
 
         while True:
@@ -241,49 +253,73 @@ class DatabaseTUI:
         if self.current_table_name is None:
             print("Ошибка: сначала создайте или выберите таблицу.")
             return
-        
-        columns = self.db.get_schema(self.current_table_name)
         print(f"\nОбновление записи в таблице '{self.current_table_name}'")
-
-        key_column = input(f"Выберите ключевое поле для поиска записи {columns}: ").strip()
-        if key_column not in columns:
-            print("Ошибка: такого поля нет в таблице.")
+        try:
+            schema = self.db.get_schema(self.current_table_name)
+        except TableNotFoundError as e:
+            print(f"Ошибка: {e}")
             return
-            
-        raw_key_value = input(f"Введите значение поля '{key_column}': ").strip()
-        key_value = self._parse_input_value(raw_key_value)
-
-        search_filter = {key_column: key_value}
-        existing_records = self.db.select_records(self.current_table_name, **search_filter)
-        if not existing_records:
-            print("Ошибка: запись с такими критериями не найдена.")
+        except InvalidStorageDataError as e:
+            print(f"Ошибка работы с хранилищем при чтении схемы: {e}")
             return
+
+        print("Введите имя ключевого поля и его значение для поиска записи:")
+        pk_column = input("  Имя ключевого поля (например, id): ").strip()
+        if pk_column not in schema:
+            print(f"Ошибка: Поля '{pk_column}' нет в структуре этой таблицы.")
+            return
+
+        raw_pk_value = input(f"  Значение поля {pk_column}: ").strip()
         
-        existing = existing_records[0]
-        print(f"Текущие данные: {existing}")
-        print("Оставьте поле пустым, чтобы не изменять его.")
+        if schema[pk_column] == "int":
+            try:
+                key_value = int(raw_pk_value)
+            except ValueError:
+                print(f"Ошибка: Поле '{pk_column}' должно быть числом.")
+                return
+        else:
+            key_value = raw_pk_value
 
-        changes = {}
-        for column in columns:
-            if column == key_column:
-                continue
-            raw_val = input(f"Новое {column} (было: {existing.get(column, '')}): ").strip()
-            if raw_val:
-                changes[column] = self._parse_input_value(raw_val)
+        print("\nВведите НОВЫЕ значения для полей (оставьте пустым, если менять не нужно):")
+        kwargs = {}
+        for col_name, col_type in schema.items():
+            raw_input = input(f"  {col_name} ({col_type}) [без изменений]: ").strip()
+            
+            if not raw_input:
+                continue  
+                
+            if col_type == "int":
+                try:
+                    kwargs[col_name] = int(raw_input)
+                except ValueError:
+                    kwargs[col_name] = raw_input  
+            else:
+                kwargs[col_name] = raw_input
 
-        if not changes:
-            print("Ничего не изменено.")
+        if not kwargs:
+            print("Отмена: Не введено ни одного изменения.")
             return
 
         try:
-            updated = self.db.update_record(self.current_table_name, key_column, key_value, **changes)
+            updated = self.db.update_record(self.current_table_name, pk_column, key_value, **kwargs)
+            
             if updated:
-                print(f"Запись обновлена: {updated}")
+                print("\n[Успех] Запись успешно обновлена.")
+                print(f"Обновленная строка: {updated}")
             else:
-                print("Ошибка при обновлении.")
-        except Exception as exc:
-            print(f"Ошибка: {exc}")
-        
+                print("\n[Внимание] Запись с таким ключом не найдена. Ничего не изменено.")
+                
+        except (UnknownColumnError, MissingColumnError) as e:
+            print(f"\n[Ошибка схемы]: {e}")
+        except TypeError as e:
+            print(f"\n[Ошибка типов данных]: {e}")
+        except DuplicateIDError as e:
+            print(f"\n[Ошибка уникальности]: {e}")
+        except TableNotFoundError as e:
+            print(f"\n[Ошибка таблицы]: {e}")
+        except InvalidStorageDataError as e:
+            print(f"\n[Критическая ошибка диска]: Ошибка при сохранении изменений: {e}")
+
     def _delete_record(self) -> None:
 
         if self.current_table_name is None:
@@ -294,7 +330,7 @@ class DatabaseTUI:
 
         try:
             columns = self.db.get_schema(self.current_table_name)            
-            key_column = input(f"Выберите ключевое поле для поиска записи {columns}: ").strip()
+            key_column = input(f"Выберите ключевое поле для поиска записи {list(columns.keys())}: ").strip()
             if key_column not in columns:
                 print("Ошибка: такого поля нет в таблице.")
                 return
@@ -328,10 +364,14 @@ class DatabaseTUI:
                 return
             
             try:
-                columns = self.db.get_schema(self.current_table_name)    
+                columns = self.db.get_schema(self.current_table_name) 
+                if isinstance(columns, (tuple, list)):
+                    columns = {col: "str" for col in columns}
+
                 print(f"\nСтруктура таблицы '{self.current_table_name}':")
-                print(f"Поля: {', '.join(columns)}")
-            except Exception as e:
+                schema_str = ", ".join([f"{k} ({v})" for k, v in columns.items()])
+                print(f"Поля: {schema_str}")
+            except (TableNotFoundError, InvalidStorageDataError) as e:
                 print(f"Ошибка: {e}")
 
     def run(self) -> None:

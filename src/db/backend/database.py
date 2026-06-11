@@ -8,29 +8,28 @@ from .table import Table
 class Database(ABC):
     """Общий интерфейс базы данных."""
 
-    def create_table(self, table_name: str, columns: tuple[str, ...]) -> None:
+    def create_table(self, table_name: str, columns: dict[str, str]) -> None:
         if self._table_exists(table_name):
             raise TableAlreadyExistsError(
                 f"Таблица '{table_name}' уже существует."
             )
-
-        self._save_table(table_name, Table(columns))
-
-    def insert_record(self, table_name: str, record: dict[str, Any]) -> None:
+        self._save_table(table_name, Table(table_name, columns))
+    
+    def insert_record(self, table_name: str, record: dict) -> None:
         table = self._load_table(table_name)
         table.insert_record(record)
         self._save_table(table_name, table)
 
-    def select_records(self, table_name: str, **filters: Any) -> list[dict[str, Any]]:
+    def select_records(self, table_name: str, **filters) -> list[dict]:
         table = self._load_table(table_name)
         return table.select_records(**filters)
     
-    def update_record(self, table_name: str, key_column: str, key_value: Any, **kwargs: Any) -> dict[str, Any] | None:
+    def update_record(self, table_name: str, key_column: str, key_value: Any, **kwargs) -> dict | None:
         table = self._load_table(table_name)
-        result = table.update_record(key_column, key_value, **kwargs)
-        if result is not None:
+        updated = table.update_record(key_column, key_value, **kwargs)
+        if updated:
             self._save_table(table_name, table)
-        return result
+        return updated
 
     def delete_record(self, table_name: str, key_column: str, key_value: Any) -> bool:
         table = self._load_table(table_name)
@@ -46,7 +45,6 @@ class Database(ABC):
     @abstractmethod
     def _table_exists(self, table_name: str) -> bool:
         """Проверяет наличие таблицы."""
-
 
     @abstractmethod
     def _load_table(self, table_name: str) -> Table:

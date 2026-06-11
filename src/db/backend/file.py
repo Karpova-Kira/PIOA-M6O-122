@@ -43,30 +43,32 @@ class FileDatabase(Database):
 
     def _save_table(self, table_name: str, table: Table) -> None:
         table_path = self._get_table_path(table_name)
-
-        with table_path.open("w", encoding="utf-8") as file:
-            json.dump(
-                self._serialize_table(table),
-                file,
-                ensure_ascii=False,
-                indent=2,
-            )
-
+        try:
+            with table_path.open("w", encoding="utf-8") as file:
+                json.dump(
+                    self._serialize_table(table),
+                    file,
+                    ensure_ascii=False,
+                    indent=2,
+                )
+        except OSError as error:
+            raise InvalidStorageDataError(f"Ошибка ввода-вывода при записи JSON '{table_name}': {error}") from error
+    
     def _get_table_path(self, table_name: str) -> Path:
         return self.directory / f"{table_name}.json"
 
     def _serialize_table(self, table: Table) -> dict:
         return {
-            "columns": list(table.columns),
-            "records": table.records,
+            "name": table.name,
+            "columns": table.columns,
+            "records": table.records
         }
 
     def _deserialize_table(self, data: dict) -> Table:
-        if "columns" not in data or "records" not in data:
-            raise InvalidStorageDataError(
-                "Файл таблицы имеет некорректную структуру."
-            )
-
-        columns = tuple(data["columns"])
+        name = data.get("name", "unknown_table")
+        columns = data.get("columns", {})
         records = data.get("records", [])
-        return Table(columns, records)
+        
+        table = Table(name, columns)
+        table.records = records
+        return table

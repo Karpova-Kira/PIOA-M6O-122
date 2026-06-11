@@ -4,48 +4,61 @@ from .errors import MissingColumnError, UnknownColumnError
 
 
 class Table:
-    def __init__(self, columns: tuple[str, ...], records: list[dict[str, Any]] | None = None) -> None:
-        self.columns = columns
+    def __init__(self, name: str, columns: dict[str, str] | tuple[str, ...] | list[str]):
+        self.name = name
+        
+        if isinstance(columns, (tuple, list)):
+            self.columns = {col: "str" for col in columns}
+        else:
+            self.columns = columns  
+            
         self.records: list[dict[str, Any]] = []
 
-        if records is not None:
-            for record in records:
-                self.insert_record(record)
+    def _validate_record(self, record: dict[str, Any], is_update: bool = False) -> None:
+        for col in record:
+            if col not in self.columns:
+                raise UnknownColumnError(f"Колонка '{col}' отсутствует в структуре таблицы.")
+
+        if not is_update:
+            for col in self.columns:
+                if col not in record:
+                    raise MissingColumnError(f"Пропущена обязательная колонка '{col}'.")
+
+        for col, value in record.items():
+            expected_type = self.columns[col]
+            if expected_type == "int":
+                if not isinstance(value, int):
+                    raise TypeError(f"Поле '{col}' должно иметь тип int, получено {type(value).__name__}.")
+            elif expected_type == "str":
+                if not isinstance(value, str):
+                    raise TypeError(f"Поле '{col}' должно иметь тип str, получено {type(value).__name__}.")
 
     def insert_record(self, record: dict[str, Any]) -> None:
-        """Добавляет запись, если она соответствует схеме таблицы."""
-        missing_columns = [column for column in self.columns if column not in record]
-        if missing_columns:
-            raise MissingColumnError(
-                f"Отсутствует поле '{missing_columns[0]}' в записи."
-            )
+        clean_record = {}
+        for col, val in record.items():
+            if col in self.columns:
+                if self.columns[col] == "int":
+                    try:
+                        clean_record[col] = int(val)
+                    except (ValueError, TypeError):
+                        clean_record[col] = val
+                else:
+                    clean_record[col] = str(val)
+            else:
+                clean_record[col] = val
 
-        extra_columns = [column for column in record if column not in self.columns]
-        if extra_columns:
-            raise UnknownColumnError(
-                f"Поле '{extra_columns[0]}' не определено в структуре таблицы."
-            )
+        self._validate_record(clean_record, is_update=False)
 
-        if "id" in record:
-            current_id = record["id"]
-            for existing_record in self.records:
-                if existing_record.get("id") == current_id:
-                    from .errors import DuplicateIDError  
-                    raise DuplicateIDError(f"Запись с id={current_id} уже существует.")
+        if self.columns:
+            pk_column = list(self.columns.keys())[0]
+            pk_value = clean_record.get(pk_column)
+            for existing in self.records:
+                if existing.get(pk_column) == pk_value:
+                    from .errors import DuplicateIDError
+                    raise DuplicateIDError(f"Запись с ключевым полем {pk_column}={pk_value} уже существует.")
 
-        if "age" in record:
-            try:
-                age_val = int(record["age"])
-                if age_val < 0 or age_val > 150:
-                    from .errors import InvalidAgeError
-                    raise InvalidAgeError(f"Недопустимый возраст: {age_val}")
-            except (ValueError, TypeError):
-                from .errors import InvalidAgeError
-                raise InvalidAgeError("Поле 'age' должно быть числом.")
-        self.records.append(record.copy())
-
+        self.records.append(clean_record)
     def select_records(self, **filters: Any) -> list[dict[str, Any]]:
-        """Возвращает записи, удовлетворяющие всем переданным фильтрам."""
         unknown_filters = [key for key in filters if key not in self.columns]
         if unknown_filters:
             raise UnknownColumnError(
@@ -65,18 +78,43 @@ class Table:
     def update_record(self, key_column: str, key_value: Any, **kwargs: Any) -> dict[str, Any] | None:
         if key_column not in self.columns:
             raise UnknownColumnError(f"Ключевое поле '{key_column}' не найдено в схеме.")
-        for key in kwargs:
-            if key not in self.columns:
-                raise UnknownColumnError(
-                    f"Поле '{key}' не определено в структуре таблицы.")
+        
+        target_record = None
+        target_index = -1
+        for i, rec in enumerate(self.records):
+            if rec.get(key_column) == key_value:
+                target_record = rec
+                target_index = i
+                break
 
-        for i, record in enumerate(self.records):
-            if record.get(key_column) == key_value:
-                updated_record = record.copy()
-                updated_record.update(kwargs)
-                self.records[i] = updated_record
-                return updated_record.copy()
-        return None
+        if target_record is None:
+            return None
+
+        updated_project = target_record.copy()
+        
+        for col, val in kwargs.items():
+            if col in self.columns:
+                if self.columns[col] == "int":
+                    try:
+                        updated_project[col] = int(val)
+                    except (ValueError, TypeError):
+                        updated_project[col] = val
+                else:
+                    updated_project[col] = str(val)
+
+        self._validate_record(updated_project, is_update=False)
+
+        pk_column = list(self.columns.keys())[0]
+        if updated_project.get(pk_column) != target_record.get(pk_column):
+            new_pk = updated_project.get(pk_column)
+            for existing in self.records:
+                if existing.get(pk_column) == new_pk:
+                    from .errors import DuplicateIDError
+                    raise DuplicateIDError(f"Запись с ключевым полем {pk_column}={new_pk} уже существует.")
+
+        self.records[target_index] = updated_project
+        return updated_project.copy()
+        
 
     def delete_record(self, key_column: str, key_value: Any) -> bool:
         if key_column not in self.columns:
