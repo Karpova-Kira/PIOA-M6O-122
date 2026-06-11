@@ -12,15 +12,9 @@ class CSVFileDatabase(Database):
     """База данных, которая хранит таблицы в CSV-файлах."""
 
     def __init__(self, directory: str = "data_csv") -> None:
-        try:
-            super().__init__()
-        except AttributeError:
-            pass
-            
         self.directory = Path(directory)
         self.directory.mkdir(parents=True, exist_ok=True)
-        if not hasattr(self, "_tables"):
-            self._tables = {}
+        self._tables = {}
             
     def create_table(self, table_name: str, columns: dict[str, str]) -> None:
         table_path = self._get_table_path(table_name)
