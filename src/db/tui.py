@@ -97,21 +97,23 @@ class DatabaseTUI:
             return
         
         record = {}
-        print("Заполните поля таблицы (для типа int вводите только цифры):")
+        record = {}
         for col_name, col_type in schema.items():
-            raw_input = input(f"  {col_name} ({col_type}): ").strip()
-            
-            if not raw_input:
-                record[col_name] = ""
-                continue
+            while True:
+                raw = input(f"  {col_name} ({col_type}): ").strip()
                 
-            if col_type == "int":
-                try:
-                    record[col_name] = int(raw_input)
-                except ValueError:
-                    record[col_name] = raw_input
-            else:
-                record[col_name] = raw_input
+                if not raw:
+                    record[col_name] = ""
+                    break
+                if col_type == "int":
+                    try:
+                        record[col_name] = int(raw)
+                        break 
+                    except ValueError:
+                        print("Ошибка: введите число.")
+                else:
+                    record[col_name] = raw
+                    break
 
         try:
             self.db.insert_record(self.current_table_name, record)
