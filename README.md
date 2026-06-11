@@ -80,6 +80,7 @@ pioa-m6o-122bv-25/
 }``` |
 | **CSV** (`CSVFileDatabase`) | ```csv
 id,name,age
+int,str,int
 1,John,20
 2,Jane,22
 ``` |
