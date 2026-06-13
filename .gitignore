@@ -1,0 +1,19 @@
+# Python cache
+__pycache__/
+.pytest_cache/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual env
+venv/
+.env/
+
+# IDE
+.vscode/
+.idea/
+
+
+.coverage
+data/
+data_csv/

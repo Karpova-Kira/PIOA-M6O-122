@@ -1,7 +1,7 @@
 from .tui import run
 
 
-def main():
+def main() -> None:
     run()
 
 

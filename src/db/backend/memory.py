@@ -1,65 +1,27 @@
-type StudentRecord = tuple[int, str, str, int, str]
 
-Student: list[StudentRecord] = []
-
-def create_record(
-    student_id: int,   # Уникальный идентификатор записи
-    first_name: str,   # Имя
-    second_name: str,  # Фамилия
-    age: int,          # Возраст
-    sex: str,          # Пол
-) -> StudentRecord:
-
-    if age < 0:
-        raise ValueError("Поле age не может быть отрицательным.")
+from .database import Database
+from .errors import TableNotFoundError
+from .table import Table
     
-    if any(record[0] == student_id for record in Student):
-        raise ValueError(f"Запись с id={student_id} уже существует.")
+    
+class MemoryDatabase(Database):
 
-    new_record: StudentRecord = (
-        student_id,
-        first_name.strip(),
-        second_name.strip(),
-        age,
-        sex.strip(),
-    )
+    def __init__(self) -> None:
+        self.tables: dict[str, Table] = {}
 
-    Student.append(new_record)
-    return new_record
+    def list_tables(self) -> list[str]:
+        return list(self.tables.keys())
 
+    def _table_exists(self, table_name: str) -> bool:
+        return table_name in self.tables
 
-def select_record(
-    student_id: int | None = None,   # Фильтр по идентификатору
-    first_name: str | None = None,   # Фильтр по имени
-    second_name: str | None = None,  # Фильтр по фамилии
-    age: int | None = None,          # Фильтр по возрасту
-    sex: str | None = None,          # Фильтр по полу
-) -> list[StudentRecord]:
+    def _load_table(self, table_name: str) -> Table:
+        if table_name not in self.tables:
+            raise TableNotFoundError(
+                f"Таблица '{table_name}' не существует."
+            )
 
-    if (
-        student_id is None
-        and first_name is None
-        and second_name is None
-        and age is None
-        and sex is None
-    ):
-        return Student.copy()
-    result: list[StudentRecord] = []
+        return self.tables[table_name]
 
-    for record in Student:
-        if student_id is not None and record[0] != student_id:
-            continue
-
-        if first_name is not None and record[1] != first_name:
-            continue
-
-        if second_name is not None and record[2] != second_name:
-            continue
-
-        if age is not None and record[3] != age:
-            continue
-
-        if sex is not None and record[4] != sex:
-            continue
-        result.append(record)
-    return result
+    def _save_table(self, table_name: str, table: Table) -> None:
+        self.tables[table_name] = table
