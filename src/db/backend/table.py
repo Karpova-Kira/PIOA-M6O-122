@@ -1,6 +1,6 @@
 from typing import Any
 
-from .errors import MissingColumnError, UnknownColumnError
+from .errors import MissingColumnError, UnknownColumnError, DuplicateIDError
 
 
 class Table:
@@ -34,18 +34,21 @@ class Table:
                     raise TypeError(f"Поле '{col}' должно иметь тип str, получено {type(value).__name__}.")
 
     def insert_record(self, record: dict[str, Any]) -> None:
-        clean_record = {}
-        for col, val in record.items():
-            if col in self.columns:
-                if self.columns[col] == "int":
-                    try:
-                        clean_record[col] = int(val)
-                    except (ValueError, TypeError):
-                        clean_record[col] = val
-                else:
-                    clean_record[col] = str(val)
+        
+        for col in record:
+            if col not in self.columns:
+               
+                raise UnknownColumnError(f"Колонка '{col}' не определена в структуре таблицы.")
+        clean_record = record.copy()
+
+        for col, val in clean_record.items():
+            if self.columns.get(col) == "int":
+                try:
+                    clean_record[col] = int(val)
+                except (ValueError, TypeError):
+                    raise TypeError(f"Поле '{col}' должно быть типа int.")
             else:
-                clean_record[col] = val
+                clean_record[col] = str(val)
 
         self._validate_record(clean_record, is_update=False)
 
@@ -54,10 +57,10 @@ class Table:
             pk_value = clean_record.get(pk_column)
             for existing in self.records:
                 if existing.get(pk_column) == pk_value:
-                    from .errors import DuplicateIDError
                     raise DuplicateIDError(f"Запись с ключевым полем {pk_column}={pk_value} уже существует.")
 
         self.records.append(clean_record)
+
     def select_records(self, **filters: Any) -> list[dict[str, Any]]:
         unknown_filters = [key for key in filters if key not in self.columns]
         if unknown_filters:
@@ -93,16 +96,17 @@ class Table:
         updated_project = target_record.copy()
         
         for col, val in kwargs.items():
-            if col in self.columns:
-                if self.columns[col] == "int":
-                    try:
-                        updated_project[col] = int(val)
-                    except (ValueError, TypeError):
-                        updated_project[col] = val
-                else:
-                    updated_project[col] = str(val)
+            if col not in self.columns:
+                raise UnknownColumnError(f"Поле '{col}' отсутствует в схеме таблицы.")
+            if self.columns[col] == "int":
+                try:
+                    updated_project[col] = int(val)
+                except (ValueError, TypeError):
+                    raise TypeError(f"Значение '{val}' для колонки '{col}' должно быть типа int.")
+            else:
+                updated_project[col] = str(val)
 
-        self._validate_record(updated_project, is_update=False)
+        self._validate_record(updated_project, is_update=True)
 
         pk_column = list(self.columns.keys())[0]
         if updated_project.get(pk_column) != target_record.get(pk_column):

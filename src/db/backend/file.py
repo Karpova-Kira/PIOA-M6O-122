@@ -1,6 +1,5 @@
 import json
 from pathlib import Path
-from typing import Any
 from .database import Database
 from .errors import InvalidStorageDataError, TableNotFoundError
 from .table import Table
@@ -55,7 +54,8 @@ class FileDatabase(Database):
             raise InvalidStorageDataError(f"Ошибка ввода-вывода при записи JSON '{table_name}': {error}") from error
     
     def _get_table_path(self, table_name: str) -> Path:
-        return self.directory / f"{table_name}.json"
+        clean_name = Path(table_name).name
+        return self.directory / f"{clean_name}.json"
 
     def _serialize_table(self, table: Table) -> dict:
         return {
@@ -65,10 +65,15 @@ class FileDatabase(Database):
         }
 
     def _deserialize_table(self, data: dict) -> Table:
-        name = data.get("name", "unknown_table")
-        columns = data.get("columns", {})
-        records = data.get("records", [])
+        if not isinstance(data.get("columns"), dict):
+            raise InvalidStorageDataError("Файл поврежден: структура 'columns' отсутствует или не является словарем.")
         
-        table = Table(name, columns)
-        table.records = records
+        if not isinstance(data.get("records"), list):
+            raise InvalidStorageDataError("Файл поврежден: структура 'records' отсутствует или не является списком.")
+
+        if not all(isinstance(rec, dict) for rec in data["records"]):
+            raise InvalidStorageDataError("Файл поврежден: одна из записей в 'records' не является словарем.")
+        
+        table = Table(data.get("name", "unknown_table"), data["columns"])
+        table.records = data["records"]
         return table

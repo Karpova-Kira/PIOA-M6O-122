@@ -42,7 +42,6 @@ class TestFileDatabase(unittest.TestCase):
         self.db.create_table("students", {"id": "int", "name": "str"})
         self.db.insert_record("students", {"id": 1, "name": "Ivan"})
         
-        # Переинициализируем базу из той же директории
         db2 = FileDatabase(self.test_dir)
         records = db2.select_records("students")
         self.assertEqual(records[0]["id"], 1)
@@ -52,7 +51,6 @@ class TestFileDatabase(unittest.TestCase):
         self.db.create_table("students", {"id": "int", "name": "str"})
         file_path = Path(self.test_dir) / "students.json"
         
-        # Ломаем JSON-структуру файла физически
         with open(file_path, "w", encoding="utf-8") as f:
             f.write("{invalid json...")
             

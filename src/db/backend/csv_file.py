@@ -60,6 +60,16 @@ class CSVFileDatabase(Database):
                 
                 col_names = rows[0]
                 col_types = rows[1]
+
+                if len(col_names) != len(col_types):
+                    raise InvalidStorageDataError(
+                        f"Ошибка структуры CSV: количество заголовков ({len(col_names)}) "
+                        f"не совпадает с количеством типов ({len(col_types)})."
+                    )
+                
+                if any(not name.strip() for name in col_names):
+                    raise InvalidStorageDataError("Ошибка структуры CSV: заголовок содержит пустые имена колонок.")
+                
                 columns = {name: t for name, t in zip(col_names, col_types)}
                 
                 table = Table(table_name, columns)
@@ -68,14 +78,19 @@ class CSVFileDatabase(Database):
                 for row in rows[2:]:
                     if not row or all(not cell for cell in row):
                         continue
-                    
+                    if len(row) != len(col_names):
+                        raise InvalidStorageDataError(f"Ошибка в строке: количество значений не соответствует схеме.")
                     record = {}
                     for i, col_name in enumerate(col_names):
-                        val = row[i] if i < len(row) else ""
+                        val = row[i] 
                         if columns[col_name] == "int" and val != "":
-                            record[col_name] = int(val)
+                            try:
+                                record[col_name] = int(val)
+                            except ValueError:
+                                raise InvalidStorageDataError(f"Поле '{col_name}' должно быть int, получено: '{val}'.")
+    
                         else:
-                            record[col_name] = val
+                            record[col_name] = str(val)
                     records.append(record)
                     
                 table.records = records
@@ -107,7 +122,8 @@ class CSVFileDatabase(Database):
             raise InvalidStorageDataError(f"Ошибка ввода-вывода при записи '{table_name}': {error}") from error
 
     def _get_table_path(self, table_name: str) -> Path:
-        return self.directory / f"{table_name}.csv"
+        clean_name = Path(table_name).name
+        return self.directory / f"{clean_name}.csv"
 
     def get_csv_content(self, table_name: str) -> str:
         table_path = self._get_table_path(table_name)

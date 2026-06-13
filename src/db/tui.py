@@ -47,17 +47,6 @@ class DatabaseTUI:
         print("0. Выход")
 
 
-
-    def _read_int(self, prompt: str) -> int:
-        
-        while True:
-            raw = input(prompt).strip()
-            try:
-                return int(raw)
-            
-            except ValueError:
-                print("Ошибка: введите целое число.")
-
     def _read_string(self, prompt: str) -> str:
         while True:
             raw = input(prompt).strip()
@@ -75,9 +64,9 @@ class DatabaseTUI:
             print(f"  {idx}. {row_str}")
 
     def _parse_input_value(self, raw: str) -> Any:
-            if raw.isdigit() or (raw.startswith(('-', '+')) and raw[1:].isdigit()):
-                return int(raw)
-            return raw
+        if raw.isdigit() or (raw.startswith(('-', '+')) and raw[1:].isdigit()):
+            return int(raw)
+        return raw
 
     def _add_record(self) -> None:
 
@@ -96,7 +85,6 @@ class DatabaseTUI:
             print(f"Ошибка работы с хранилищем при чтении схемы: {e}")
             return
         
-        record = {}
         record = {}
         for col_name, col_type in schema.items():
             while True:

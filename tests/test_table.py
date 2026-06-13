@@ -17,15 +17,11 @@ class TestTable(unittest.TestCase):
         self.assertEqual(self.table.records[0]["age"], 20)
 
     def test_insert_record_duplicate_id(self):
-        table = Table(self.student_schema)
+        table = Table("test_table", self.columns)
+        
         table.insert_record({"id": 1, "name": "John", "age": 20})
         with self.assertRaises(DuplicateIDError):
             table.insert_record({"id": 1, "name": "Jane", "age": 22})
-    
-    def test_insert_record_duplicate_id(self) -> None:
-        self.table.insert_record({"id": 1, "name": "Ivan", "age": 20})
-        with self.assertRaises(DuplicateIDError):
-            self.table.insert_record({"id": 1, "name": "Petr", "age": 22})
     
     def test_insert_record_missing_column(self) -> None:
         with self.assertRaises(MissingColumnError):
